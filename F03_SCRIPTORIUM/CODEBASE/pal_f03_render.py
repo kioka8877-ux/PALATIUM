@@ -247,10 +247,11 @@ def serve_render_html_for_frame(frame_idx: int, in_dir: str) -> str:
     creative = _render_config_cache["creative"]
     tags = _render_config_cache["tags"]
 
-    # Déterminer résolution (shorts ou youtube — on utilise la première)
-    fmt = (scene.get("output_formats") or ["shorts"])[0]
-    res = scene.get("resolution", {}).get(fmt, {"width": 1080, "height": 1920})
-    total = scene.get("total_frames", {}).get(fmt, 1800)
+    # Résolution : lire depuis le cache (fmt injecté par ScriptoriumRenderer)
+    active_fmt = _render_config_cache.get("active_fmt") or \
+                 (scene.get("output_formats") or ["shorts"])[0]
+    res = scene.get("resolution", {}).get(active_fmt, {"width": 1080, "height": 1920})
+    total = scene.get("total_frames", {}).get(active_fmt, 1800)
 
     html = RENDER_HTML_TEMPLATE.format(
         config_json=json.dumps(creative),
@@ -320,6 +321,14 @@ class ScriptoriumRenderer:
         total = params["total_frames"]
         width = params["width"]
         height = params["height"]
+
+        # Injecter le format actif dans le cache global (pour serve_render_html_for_frame)
+        _render_config_cache["active_fmt"] = fmt
+        _render_config_cache.update({
+            "scene":    self.scene_cfg,
+            "creative": self.creative_cfg,
+            "tags":     self.tags_cfg
+        })
 
         out_fmt_dir = self.out_dir / fmt
         out_fmt_dir.mkdir(parents=True, exist_ok=True)
@@ -407,10 +416,38 @@ class ScriptoriumRenderer:
 
 def run_render(in_dir: str, out_frames_dir: str, fmt: str = "shorts",
                static_port: int = 5003, headless: bool = True):
-    """Point d'entrée synchrone depuis le notebook."""
+    """
+    Point d'entrée depuis le notebook.
+    Utilise nest_asyncio pour compatibilité Jupyter/Colab (event loop déjà actif).
+    """
+    # Invalider le cache pour permettre plusieurs rendus successifs
+    _render_config_cache.clear()
+
+    # Compatibilité Jupyter/Colab : event loop déjà actif → nest_asyncio requis
+    try:
+        import nest_asyncio
+        nest_asyncio.apply()
+    except ImportError:
+        pass  # Hors Jupyter : asyncio.run() fonctionne normalement
+
     renderer = ScriptoriumRenderer(in_dir, out_frames_dir, static_port)
     start_static_server(in_dir, static_port)
-    import time; time.sleep(1)  # Laisser Flask démarrer
+
+    # Vérifier que Flask est prêt avant de lancer Playwright
+    import urllib.request
+    deadline = time.time() + 15
+    ready = False
+    while time.time() < deadline:
+        try:
+            urllib.request.urlopen(f"http://localhost:{static_port}/static/glb", timeout=2)
+            ready = True
+            break
+        except Exception:
+            time.sleep(0.3)
+    if not ready:
+        raise RuntimeError(f"Serveur Flask interne non joignable sur le port {static_port} "
+                           "— vérifier qu'aucun autre processus n'occupe ce port.")
+
     asyncio.run(renderer.render_all_frames(fmt=fmt, headless=headless))
 
 
