@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PALATIUM — F02 OCULUS Viewer</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #0a0a0f; color: #e0d8c8; font-family: 'Courier New', monospace; overflow: hidden; }
+    #canvas-container { position: fixed; inset: 0; }
+    canvas { display: block; width: 100%; height: 100%; }
+
+    /* ── PANELS ── */
+    .panel {
+      position: fixed; top: 0; background: rgba(8,8,16,0.92);
+      border: 1px solid #3a3050; padding: 12px;
+      overflow-y: auto; z-index: 100;
+      font-size: 11px; line-height: 1.6;
+      backdrop-filter: blur(6px);
+    }
+    #panel-left  { left: 0; width: 240px; height: 100vh; }
+    #panel-right { right: 0; width: 260px; height: 100vh; }
+
+    .panel h2 { color: #c9a84c; font-size: 11px; text-transform: uppercase;
+                letter-spacing: 2px; border-bottom: 1px solid #3a3050;
+                padding-bottom: 6px; margin-bottom: 10px; }
+    .panel h3 { color: #8a7abf; font-size: 10px; text-transform: uppercase;
+                letter-spacing: 1px; margin: 10px 0 6px; }
+    label { display: block; color: #a09088; margin-bottom: 2px; font-size: 10px; }
+    input[type=range] { width: 100%; accent-color: #c9a84c; }
+    input[type=number], select {
+      width: 100%; background: #13121e; border: 1px solid #3a3050;
+      color: #e0d8c8; padding: 3px 6px; border-radius: 3px; font-size: 10px;
+    }
+    .row { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
+    .row label { flex: 1; margin: 0; }
+    .row input, .row select { flex: 1.5; }
+    .val-display { min-width: 32px; text-align: right; color: #c9a84c; font-size: 10px; }
+
+    /* ── BUTTONS ── */
+    .btn {
+      display: block; width: 100%; padding: 7px;
+      background: #1e1b2e; border: 1px solid #3a3050;
+      color: #e0d8c8; cursor: pointer; border-radius: 3px;
+      font-family: 'Courier New', monospace; font-size: 10px;
+      text-transform: uppercase; letter-spacing: 1px;
+      margin-top: 6px; transition: all 0.15s;
+    }
+    .btn:hover { background: #2e2a45; border-color: #c9a84c; color: #c9a84c; }
+    .btn-primary { background: #2a1e0a; border-color: #c9a84c; color: #c9a84c; }
+    .btn-primary:hover { background: #3a2e15; }
+    .btn-danger { border-color: #8a2020; color: #c04040; }
+
+    /* ── TAG ITEMS ── */
+    .tag-item {
+      background: #13121e; border: 1px solid #2a2840;
+      border-radius: 3px; padding: 5px 7px; margin-bottom: 4px;
+      cursor: pointer; transition: border-color 0.1s;
+    }
+    .tag-item:hover { border-color: #c9a84c; }
+    .tag-item.selected { border-color: #c9a84c; background: #1e1a2a; }
+    .tag-name { color: #d0c8e0; font-size: 10px; font-weight: bold; }
+    .tag-conf { color: #6a5a8a; font-size: 9px; }
+    .tag-toggle { float: right; }
+
+    /* ── WAYPOINT LIST ── */
+    .wp-item {
+      background: #13121e; border: 1px solid #2a2840;
+      border-radius: 3px; padding: 4px 7px; margin-bottom: 3px;
+      font-size: 10px; display: flex; justify-content: space-between; align-items: center;
+    }
+    .wp-item .wp-del { color: #8a2020; cursor: pointer; font-size: 11px; }
+    .wp-item .wp-del:hover { color: #ff4040; }
+
+    /* ── STATUS BAR ── */
+    #status-bar {
+      position: fixed; bottom: 0; left: 240px; right: 260px;
+      background: rgba(8,8,16,0.9); border-top: 1px solid #3a3050;
+      padding: 5px 12px; font-size: 10px; color: #6a5a8a;
+      display: flex; justify-content: space-between; z-index: 100;
+    }
+    #status-msg { color: #c9a84c; }
+
+    /* ── SPAWN MARKER ── */
+    #crosshair {
+      position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
+      pointer-events: none; opacity: 0.5; z-index: 50;
+    }
+    #crosshair line { stroke: #c9a84c; stroke-width: 1; }
+
+    .mode-badge {
+      position: fixed; top: 8px; left: 50%; transform: translateX(-50%);
+      background: #1e1a2a; border: 1px solid #3a3050; padding: 3px 10px;
+      font-size: 10px; color: #c9a84c; letter-spacing: 2px; z-index: 101;
+      text-transform: uppercase;
+    }
+  </style>
+</head>
+<body>
+
+<div id="canvas-container"><canvas id="c"></canvas></div>
+
+<div class="mode-badge" id="mode-badge">MODE : NAVIGATION</div>
+
+<!-- ── PANNEAU GAUCHE : Caméra + Éclairage ── -->
+<div class="panel" id="panel-left">
+  <h2>F02 OCULUS — Caméra</h2>
+
+  <h3>Preset</h3>
+  <select id="cam-preset">
+    <option value="DRONE">DRONE — Extérieur aérien</option>
+    <option value="IPHONE_STAB">IPHONE_STAB — Gimbal</option>
+    <option value="DOLLY_PAN" selected>DOLLY_PAN — Single Room</option>
+    <option value="WALKTHROUGH">WALKTHROUGH — Multi Room</option>
+  </select>
+
+  <h3>Spawn</h3>
+  <div class="row"><label>X</label><input type="number" id="spawn-x" value="0" step="0.1"><span class="val-display" id="sx-disp">0</span></div>
+  <div class="row"><label>Y</label><input type="number" id="spawn-y" value="0" step="0.1"><span class="val-display" id="sy-disp">0</span></div>
+  <div class="row"><label>Z</label><input type="number" id="spawn-z" value="0" step="0.1"><span class="val-display" id="sz-disp">0</span></div>
+  <button class="btn" id="btn-set-spawn">⊕ Définir Spawn (S)</button>
+  <button class="btn" id="btn-goto-spawn">→ Aller au Spawn</button>
+
+  <h3>Waypoints</h3>
+  <button class="btn" id="btn-add-wp">+ Ajouter Waypoint (W)</button>
+  <div id="wp-list"></div>
+  <button class="btn btn-danger" id="btn-clear-wp">✕ Effacer tous les WP</button>
+
+  <h3>Caméra</h3>
+  <div class="row"><label>FOV</label>
+    <input type="range" id="cam-fov" min="40" max="110" value="84">
+    <span class="val-display" id="fov-disp">84°</span>
+  </div>
+  <div class="row"><label>Hauteur</label>
+    <input type="range" id="cam-height" min="0" max="5" value="1.2" step="0.1">
+    <span class="val-display" id="height-disp">1.2m</span>
+  </div>
+
+  <h3>Éclairage</h3>
+  <div class="row"><label>Ambiance</label>
+    <select id="ambient-mode">
+      <option value="DAY">DAY</option>
+      <option value="GOLDEN_HOUR" selected>GOLDEN_HOUR</option>
+      <option value="NIGHT">NIGHT</option>
+    </select>
+  </div>
+  <div class="row"><label>HDRI</label>
+    <select id="hdri-select"></select>
+  </div>
+  <div class="row"><label>Toutes portes ouvertes</label>
+    <input type="checkbox" id="doors-all-open" checked>
+  </div>
+</div>
+
+<!-- ── PANNEAU DROIT : Tags ── -->
+<div class="panel" id="panel-right">
+  <h2>Tags — Assets</h2>
+
+  <h3>Lampes (<span id="lamp-count">0</span>)</h3>
+  <div id="tags-lamps"></div>
+
+  <h3>Vitres (<span id="win-count">0</span>)</h3>
+  <div id="tags-windows"></div>
+
+  <h3>Portes (<span id="door-count">0</span>)</h3>
+  <div id="tags-doors"></div>
+
+  <h3>Actions</h3>
+  <button class="btn" id="btn-highlight">Surligner Sélection</button>
+  <button class="btn btn-primary" id="btn-save">SAUVEGARDER (Ctrl+S)</button>
+  <div id="save-status" style="margin-top:6px; font-size:10px; color:#6a9a6a;"></div>
+</div>
+
+<!-- ── STATUS BAR ── -->
+<div id="status-bar">
+  <span>PALATIUM F02 OCULUS</span>
+  <span id="status-msg">Chargement du GLB...</span>
+  <span id="cam-pos-display">Pos: 0.0, 0.0, 0.0</span>
+</div>
+
+<!-- ── CROSSHAIR ── -->
+<svg id="crosshair" width="24" height="24" viewBox="0 0 24 24">
+  <line x1="12" y1="0" x2="12" y2="24"/><line x1="0" y1="12" x2="24" y2="12"/>
+</svg>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ── SCENE SETUP ──────────────────────────────────────────
+const canvas = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
+renderer.shadowMap.enabled = true;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(84, 1, 0.01, 2000);
+camera.position.set(0, 1.2, 5);
+
+const controls = new OrbitControls(camera, canvas);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.screenSpacePanning = false;
+controls.maxPolarAngle = Math.PI * 0.9;
+
+// ── STATE ────────────────────────────────────────────────
+const state = {
+  spawnPos: { x: 0, y: 0, z: 0 },
+  waypoints: [],
+  tags: { lamps: [], windows: [], doors: [] },
+  config: {},
+  model: null,
+  hdriList: [],
+  selectedTag: null,
+  mode: 'navigate'  // 'navigate' | 'spawn' | 'waypoint'
+};
+
+// Helpers visuels
+const wpHelpers = [];
+let spawnHelper = null;
+
+function makeSpawnMarker(pos) {
+  const geo = new THREE.SphereGeometry(0.08, 8, 8);
+  const mat = new THREE.MeshBasicMaterial({ color: 0xc9a84c });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.set(pos.x, pos.y, pos.z);
+  return mesh;
+}
+
+function makeWpMarker(pos, index) {
+  const geo = new THREE.SphereGeometry(0.06, 8, 8);
+  const mat = new THREE.MeshBasicMaterial({ color: 0x6a9abf });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.set(pos.x, pos.y, pos.z);
+  return mesh;
+}
+
+// ── LOAD INFO ─────────────────────────────────────────────
+async function loadInfo() {
+  try {
+    const res = await fetch('/info');
+    const data = await res.json();
+    state.config = data.config;
+    state.tags   = data.tags;
+    state.hdriList = data.hdri_available || [];
+    populateTagPanels();
+    populateHdriSelect();
+    setStatus('Config chargée. Chargement GLB...');
+    await loadGLB();
+  } catch(e) {
+    setStatus('Erreur chargement /info : ' + e.message);
+  }
+}
+
+// ── LOAD GLB ─────────────────────────────────────────────
+async function loadGLB() {
+  const loader = new GLTFLoader();
+  loader.load(
+    '/glb',
+    (gltf) => {
+      state.model = gltf.scene;
+      scene.add(gltf.scene);
+
+      // Centrer + cadrer
+      const box = new THREE.Box3().setFromObject(gltf.scene);
+      const center = box.getCenter(new THREE.Vector3());
+      const size = box.getSize(new THREE.Vector3());
+      const maxDim = Math.max(size.x, size.y, size.z);
+
+      controls.target.copy(center);
+      camera.position.set(center.x + maxDim, center.y + size.y * 0.5, center.z + maxDim);
+      controls.update();
+
+      gltf.scene.traverse(node => {
+        if (node.isMesh) {
+          node.castShadow = true;
+          node.receiveShadow = true;
+        }
+      });
+      setStatus('GLB chargé. Viewer prêt.');
+    },
+    (xhr) => { setStatus(`GLB : ${Math.round(xhr.loaded / xhr.total * 100)}%`); },
+    (err) => { setStatus('Erreur GLB : ' + err.message); }
+  );
+}
+
+// ── HDRI LOADING ──────────────────────────────────────────
+function populateHdriSelect() {
+  const sel = document.getElementById('hdri-select');
+  sel.innerHTML = '';
+  state.hdriList.forEach(h => {
+    const opt = document.createElement('option');
+    opt.value = h; opt.textContent = h;
+    sel.appendChild(opt);
+  });
+  if (state.hdriList.length > 0) loadHdri(state.hdriList[0]);
+}
+
+function loadHdri(filename) {
+  if (!filename) return;
+  new RGBELoader().load('/hdri/' + filename, (tex) => {
+    tex.mapping = THREE.EquirectangularReflectionMapping;
+    scene.environment = tex;
+    scene.background  = tex;
+    renderer.toneMappingExposure = 0.8;
+  });
+}
+
+document.getElementById('hdri-select').addEventListener('change', e => {
+  loadHdri(e.target.value);
+});
+
+// ── TAG PANELS ────────────────────────────────────────────
+function populateTagPanels() {
+  const { lamps, windows, doors } = state.tags;
+  document.getElementById('lamp-count').textContent = lamps.length;
+  document.getElementById('win-count').textContent  = windows.length;
+  document.getElementById('door-count').textContent = doors.length;
+
+  renderTagList('tags-lamps',   lamps,   'lamps');
+  renderTagList('tags-windows', windows, 'windows');
+  renderTagList('tags-doors',   doors,   'doors');
+}
+
+function renderTagList(containerId, items, category) {
+  const container = document.getElementById(containerId);
+  container.innerHTML = '';
+  items.forEach((item, i) => {
+    const div = document.createElement('div');
+    div.className = 'tag-item';
+    div.innerHTML = `
+      <span class="tag-name">${item.name}</span>
+      <span class="tag-conf"> conf:${item.confidence}</span>
+      <span class="tag-toggle">
+        ${category === 'lamps'
+          ? `<input type="checkbox" ${item.enabled !== false ? 'checked' : ''}
+               onchange="window.toggleLamp(${i}, this.checked)" title="On/Off">`
+          : category === 'doors'
+          ? `<input type="checkbox" ${item.open ? 'checked' : ''}
+               onchange="window.toggleDoor(${i}, this.checked)" title="Ouverte">`
+          : ''}
+      </span>`;
+    div.addEventListener('click', () => selectTag(category, i, div));
+    container.appendChild(div);
+  });
+}
+
+function selectTag(category, index, el) {
+  document.querySelectorAll('.tag-item.selected').forEach(e => e.classList.remove('selected'));
+  el.classList.add('selected');
+  state.selectedTag = { category, index };
+}
+
+window.toggleLamp = (i, checked) => {
+  state.tags.lamps[i].enabled = checked;
+};
+window.toggleDoor = (i, checked) => {
+  state.tags.doors[i].open = checked;
+};
+
+// ── SPAWN & WAYPOINTS ─────────────────────────────────────
+function setSpawn() {
+  const pos = camera.position.clone();
+  state.spawnPos = { x: +pos.x.toFixed(3), y: +pos.y.toFixed(3), z: +pos.z.toFixed(3) };
+  document.getElementById('spawn-x').value = state.spawnPos.x;
+  document.getElementById('spawn-y').value = state.spawnPos.y;
+  document.getElementById('spawn-z').value = state.spawnPos.z;
+
+  if (spawnHelper) scene.remove(spawnHelper);
+  spawnHelper = makeSpawnMarker(state.spawnPos);
+  scene.add(spawnHelper);
+  setStatus(`Spawn défini : ${state.spawnPos.x}, ${state.spawnPos.y}, ${state.spawnPos.z}`);
+}
+
+function addWaypoint() {
+  const pos = camera.position.clone();
+  const wp = { x: +pos.x.toFixed(3), y: +pos.y.toFixed(3), z: +pos.z.toFixed(3) };
+  state.waypoints.push(wp);
+  const marker = makeWpMarker(wp, state.waypoints.length - 1);
+  wpHelpers.push(marker);
+  scene.add(marker);
+  renderWpList();
+  setStatus(`WP #${state.waypoints.length} ajouté`);
+}
+
+function renderWpList() {
+  const list = document.getElementById('wp-list');
+  list.innerHTML = '';
+  state.waypoints.forEach((wp, i) => {
+    const div = document.createElement('div');
+    div.className = 'wp-item';
+    div.innerHTML = `<span>WP${i+1} (${wp.x}, ${wp.y}, ${wp.z})</span>
+      <span class="wp-del" onclick="window.removeWp(${i})">✕</span>`;
+    list.appendChild(div);
+  });
+}
+
+window.removeWp = (i) => {
+  state.waypoints.splice(i, 1);
+  if (wpHelpers[i]) { scene.remove(wpHelpers[i]); wpHelpers.splice(i, 1); }
+  renderWpList();
+};
+
+document.getElementById('btn-clear-wp').addEventListener('click', () => {
+  state.waypoints = [];
+  wpHelpers.forEach(h => scene.remove(h));
+  wpHelpers.length = 0;
+  renderWpList();
+});
+
+document.getElementById('btn-set-spawn').addEventListener('click', setSpawn);
+document.getElementById('btn-goto-spawn').addEventListener('click', () => {
+  camera.position.set(state.spawnPos.x, state.spawnPos.y, state.spawnPos.z);
+});
+document.getElementById('btn-add-wp').addEventListener('click', addWaypoint);
+
+// Sync manual inputs → state
+['spawn-x','spawn-y','spawn-z'].forEach(id => {
+  document.getElementById(id).addEventListener('input', () => {
+    state.spawnPos = {
+      x: parseFloat(document.getElementById('spawn-x').value) || 0,
+      y: parseFloat(document.getElementById('spawn-y').value) || 0,
+      z: parseFloat(document.getElementById('spawn-z').value) || 0
+    };
+  });
+});
+
+// ── SLIDERS ───────────────────────────────────────────────
+document.getElementById('cam-fov').addEventListener('input', e => {
+  camera.fov = parseFloat(e.target.value);
+  camera.updateProjectionMatrix();
+  document.getElementById('fov-disp').textContent = e.target.value + '°';
+});
+
+document.getElementById('cam-height').addEventListener('input', e => {
+  document.getElementById('height-disp').textContent = e.target.value + 'm';
+});
+
+// ── KEYBOARD SHORTCUTS ────────────────────────────────────
+window.addEventListener('keydown', e => {
+  if (e.key === 's' || e.key === 'S') setSpawn();
+  if (e.key === 'w' || e.key === 'W') addWaypoint();
+  if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); saveConfigs(); }
+});
+
+// ── SAVE ─────────────────────────────────────────────────
+async function saveConfigs() {
+  const preset = document.getElementById('cam-preset').value;
+  const fov    = parseFloat(document.getElementById('cam-fov').value);
+  const height = parseFloat(document.getElementById('cam-height').value);
+  const ambientMode = document.getElementById('ambient-mode').value;
+  const doorsAllOpen = document.getElementById('doors-all-open').checked;
+  const hdri = document.getElementById('hdri-select').value;
+
+  const creativeConfig = {
+    camera: {
+      mode: preset,
+      fov,
+      height,
+      spawn_pos: state.spawnPos,
+      waypoints: state.waypoints
+    },
+    lighting: {
+      ambient_mode: ambientMode,
+      hdri_file: hdri,
+      lamps_override: state.tags.lamps.map(l => ({
+        name: l.name, enabled: l.enabled !== false, intensity: l.intensity || 1.0
+      })),
+      doors_all_open: doorsAllOpen,
+      doors_override: state.tags.doors.map(d => ({
+        name: d.name, open: d.open || false
+      }))
+    }
+  };
+
+  const tagsConfig = {
+    lamps:   state.tags.lamps,
+    windows: state.tags.windows,
+    doors:   state.tags.doors
+  };
+
+  try {
+    const res = await fetch('/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ creative_config: creativeConfig, tags_config: tagsConfig })
+    });
+    const data = await res.json();
+    const el = document.getElementById('save-status');
+    if (data.status === 'ok') {
+      el.textContent = '✅ Sauvegardé : ' + data.saved.join(', ');
+      el.style.color = '#6a9a6a';
+      setStatus('Configs sauvegardées → prêt pour F03');
+    } else {
+      el.textContent = '❌ Erreur : ' + JSON.stringify(data.errors);
+      el.style.color = '#c04040';
+    }
+  } catch(e) {
+    document.getElementById('save-status').textContent = '❌ ' + e.message;
+  }
+}
+
+document.getElementById('btn-save').addEventListener('click', saveConfigs);
+
+// ── RESIZE ────────────────────────────────────────────────
+function resize() {
+  const w = window.innerWidth, h = window.innerHeight;
+  renderer.setSize(w, h);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+window.addEventListener('resize', resize);
+resize();
+
+// ── ANIMATE ───────────────────────────────────────────────
+function animate() {
+  requestAnimationFrame(animate);
+  controls.update();
+
+  const p = camera.position;
+  document.getElementById('cam-pos-display').textContent =
+    `Pos: ${p.x.toFixed(2)}, ${p.y.toFixed(2)}, ${p.z.toFixed(2)}`;
+
+  renderer.render(scene, camera);
+}
+
+function setStatus(msg) {
+  document.getElementById('status-msg').textContent = msg;
+}
+
+// ── INIT ──────────────────────────────────────────────────
+loadInfo();
+animate();
+</script>
+</body>
+</html>
