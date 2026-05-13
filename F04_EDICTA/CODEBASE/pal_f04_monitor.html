@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PALATIUM — F04 EDICTA Monitor</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #0a0a0f; color: #e0d8c8;
+      font-family: 'Courier New', monospace;
+      min-height: 100vh; padding: 24px;
+    }
+    h1 { color: #c9a84c; font-size: 14px; letter-spacing: 3px;
+         text-transform: uppercase; margin-bottom: 4px; }
+    .subtitle { color: #6a5a8a; font-size: 10px; margin-bottom: 24px; }
+
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; max-width: 900px; }
+    @media (max-width: 700px) { .grid { grid-template-columns: 1fr; } }
+
+    .card {
+      background: #0e0d18; border: 1px solid #2a2840;
+      border-radius: 4px; padding: 16px;
+    }
+    .card h2 { color: #8a7abf; font-size: 10px; text-transform: uppercase;
+               letter-spacing: 2px; border-bottom: 1px solid #2a2840;
+               padding-bottom: 8px; margin-bottom: 12px; }
+
+    /* ── PROGRESS BAR ── */
+    .progress-container { margin: 10px 0; }
+    .progress-bar {
+      height: 6px; background: #1e1b2e; border-radius: 3px; overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%; background: linear-gradient(90deg, #c9a84c, #e8c870);
+      border-radius: 3px; transition: width 0.5s ease;
+      width: 0%;
+    }
+    .progress-text { font-size: 10px; color: #a09088; margin-top: 4px; }
+
+    /* ── STATUS BADGE ── */
+    .badge {
+      display: inline-block; padding: 2px 8px;
+      border-radius: 2px; font-size: 10px; letter-spacing: 1px;
+      text-transform: uppercase; font-weight: bold;
+    }
+    .badge-idle      { background: #1a1a2e; color: #6a5a8a; border: 1px solid #3a3050; }
+    .badge-encoding  { background: #1a1400; color: #c9a84c; border: 1px solid #c9a84c; }
+    .badge-done      { background: #0a1a0a; color: #6a9a6a; border: 1px solid #4a7a4a; }
+    .badge-error     { background: #1a0a0a; color: #c04040; border: 1px solid #8a2020; }
+    .badge-cancelled { background: #1a1a1a; color: #808080; border: 1px solid #404040; }
+
+    /* ── BUTTONS ── */
+    .btn {
+      padding: 8px 14px; border-radius: 3px; font-family: 'Courier New', monospace;
+      font-size: 11px; text-transform: uppercase; letter-spacing: 1px;
+      cursor: pointer; transition: all 0.15s; border: 1px solid;
+    }
+    .btn-gold  { background: #1e1600; color: #c9a84c; border-color: #c9a84c; }
+    .btn-gold:hover { background: #2e2300; }
+    .btn-red   { background: #1a0a0a; color: #c04040; border-color: #8a2020; }
+    .btn-red:hover { background: #2a1010; }
+    .btn-blue  { background: #0a0a1a; color: #6a7abf; border-color: #3a4080; }
+    .btn-blue:hover { background: #12122a; }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+
+    /* ── STATS ── */
+    .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+    .stat-item { background: #13121e; border: 1px solid #2a2840; border-radius: 3px; padding: 8px; }
+    .stat-label { font-size: 9px; color: #6a5a8a; text-transform: uppercase; letter-spacing: 1px; }
+    .stat-value { font-size: 14px; color: #c9a84c; margin-top: 2px; }
+
+    /* ── FILE LIST ── */
+    .file-item {
+      display: flex; justify-content: space-between; align-items: center;
+      background: #13121e; border: 1px solid #2a2840;
+      border-radius: 3px; padding: 8px 10px; margin-bottom: 6px;
+    }
+    .file-name { font-size: 11px; }
+    .file-size { font-size: 10px; color: #c9a84c; }
+    .file-absent { color: #6a5a8a; font-size: 10px; font-style: italic; }
+
+    /* ── LOG ── */
+    #log {
+      background: #080810; border: 1px solid #2a2840; border-radius: 3px;
+      padding: 10px; height: 180px; overflow-y: auto;
+      font-size: 10px; color: #a09088; line-height: 1.8;
+    }
+    .log-ok   { color: #6a9a6a; }
+    .log-err  { color: #c04040; }
+    .log-info { color: #6a7abf; }
+    .log-warn { color: #c9a84c; }
+
+    select, input[type=radio] { accent-color: #c9a84c; }
+    label { font-size: 11px; color: #a09088; }
+    select {
+      background: #13121e; border: 1px solid #3a3050;
+      color: #e0d8c8; padding: 5px 8px; border-radius: 3px;
+      font-family: 'Courier New', monospace; font-size: 11px;
+    }
+
+    .section-full { grid-column: 1 / -1; }
+  </style>
+</head>
+<body>
+
+<h1>PALATIUM — F04 EDICTA</h1>
+<p class="subtitle">Pipeline FFmpeg — PNG → MP4 4K</p>
+
+<div class="grid">
+  <!-- ── CONTRÔLES ── -->
+  <div class="card">
+    <h2>Encodage</h2>
+    <div style="margin-bottom:10px;">
+      <label>Format :</label>
+      <select id="fmt-select" style="margin-left:8px;">
+        <option value="shorts">Shorts (1080×1920 — 30s)</option>
+        <option value="youtube">YouTube (3840×2160 — 90s)</option>
+        <option value="all">Les deux formats</option>
+      </select>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-gold" id="btn-encode">▶ ENCODER</button>
+      <button class="btn btn-red"  id="btn-cancel" disabled>⬛ ANNULER</button>
+    </div>
+
+    <div style="margin-top:16px;">
+      <span id="status-badge" class="badge badge-idle">IDLE</span>
+      <span id="status-msg" style="font-size:10px; color:#a09088; margin-left:8px;"></span>
+    </div>
+
+    <div class="progress-container" style="margin-top:12px;">
+      <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+      <div class="progress-text" id="progress-text">—</div>
+    </div>
+
+    <div class="stat-grid">
+      <div class="stat-item">
+        <div class="stat-label">Écoulé</div>
+        <div class="stat-value" id="stat-elapsed">—</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-label">Frames</div>
+        <div class="stat-value" id="stat-frames">—</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── FICHIERS OUT ── -->
+  <div class="card">
+    <h2>Fichiers de Sortie</h2>
+    <div id="file-list">
+      <div class="file-item">
+        <span class="file-absent">Chargement...</span>
+      </div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-blue" onclick="downloadFile('shorts')">⬇ Shorts</button>
+      <button class="btn btn-blue" onclick="downloadFile('youtube')">⬇ YouTube</button>
+    </div>
+  </div>
+
+  <!-- ── LOG ── -->
+  <div class="card section-full">
+    <h2>Journal</h2>
+    <div id="log"></div>
+  </div>
+</div>
+
+<script>
+let pollInterval = null;
+let lastStatus = null;
+
+// ── INIT ───────────────────────────────────────────────
+window.addEventListener('load', () => {
+  refreshStatus();
+  refreshFiles();
+  loadFramesCount();
+  startPolling();
+});
+
+// ── POLLING ────────────────────────────────────────────
+function startPolling(interval = 2000) {
+  if (pollInterval) clearInterval(pollInterval);
+  pollInterval = setInterval(() => {
+    refreshStatus();
+    if (!lastStatus || !lastStatus.running) refreshFiles();
+  }, interval);
+}
+
+// ── STATUS ─────────────────────────────────────────────
+async function refreshStatus() {
+  try {
+    const res = await fetch('/status');
+    const data = await res.json();
+    updateUI(data);
+    lastStatus = data;
+  } catch(e) {
+    addLog('Erreur /status : ' + e.message, 'err');
+  }
+}
+
+function updateUI(data) {
+  const badge = document.getElementById('status-badge');
+  const msg   = document.getElementById('status-msg');
+  const fill  = document.getElementById('progress-fill');
+  const ptxt  = document.getElementById('progress-text');
+  const elapsed = document.getElementById('stat-elapsed');
+
+  // Badge
+  const classes = {
+    idle: 'badge-idle', encoding: 'badge-encoding',
+    done: 'badge-done', error: 'badge-error', cancelled: 'badge-cancelled'
+  };
+  badge.className = 'badge ' + (classes[data.status] || 'badge-idle');
+  badge.textContent = data.status.toUpperCase();
+  msg.textContent = data.message || '';
+
+  // Progress
+  const pct = Math.round((data.progress || 0) * 100);
+  fill.style.width = pct + '%';
+  ptxt.textContent = data.running ? pct + '%' : (data.status === 'done' ? '100% — Terminé' : '—');
+
+  // Elapsed
+  if (data.elapsed_sec > 0) {
+    const h = Math.floor(data.elapsed_sec / 3600);
+    const m = Math.floor((data.elapsed_sec % 3600) / 60);
+    const s = data.elapsed_sec % 60;
+    elapsed.textContent = h > 0
+      ? `${h}h${String(m).padStart(2,'0')}m`
+      : `${String(m).padStart(2,'0')}m${String(s).padStart(2,'0')}s`;
+  } else {
+    elapsed.textContent = '—';
+  }
+
+  // Buttons
+  document.getElementById('btn-encode').disabled = data.running;
+  document.getElementById('btn-cancel').disabled = !data.running;
+
+  // Log si changement
+  if (lastStatus && lastStatus.status !== data.status) {
+    const cls = {done:'ok', error:'err', encoding:'info', cancelled:'warn'}[data.status] || '';
+    addLog(`Status → ${data.status.toUpperCase()} ${data.message ? '| ' + data.message : ''}`, cls);
+    if (data.status === 'done') {
+      addLog('Fichiers MP4 disponibles dans OUT_FINAL/', 'ok');
+      refreshFiles();
+    }
+  }
+}
+
+// ── FILES ──────────────────────────────────────────────
+async function refreshFiles() {
+  try {
+    const res = await fetch('/files');
+    const data = await res.json();
+    const list = document.getElementById('file-list');
+    list.innerHTML = '';
+
+    for (const [fmt, info] of Object.entries(data)) {
+      const names = {shorts: 'shorts_vertical.mp4', youtube: 'youtube_horizontal.mp4'};
+      const div = document.createElement('div');
+      div.className = 'file-item';
+      if (info.exists) {
+        div.innerHTML = `<span class="file-name">${names[fmt]}</span>
+          <span class="file-size">${info.size_mb} MB</span>`;
+      } else {
+        div.innerHTML = `<span class="file-name" style="color:#6a5a8a">${names[fmt]}</span>
+          <span class="file-absent">non généré</span>`;
+      }
+      list.appendChild(div);
+    }
+  } catch(e) {}
+}
+
+async function loadFramesCount() {
+  try {
+    const fmt = document.getElementById('fmt-select').value === 'all'
+      ? 'shorts' : document.getElementById('fmt-select').value;
+    const res = await fetch('/frames-count?format=' + fmt);
+    const data = await res.json();
+    document.getElementById('stat-frames').textContent = data.count;
+  } catch(e) {}
+}
+
+document.getElementById('fmt-select').addEventListener('change', loadFramesCount);
+
+// ── ACTIONS ────────────────────────────────────────────
+document.getElementById('btn-encode').addEventListener('click', async () => {
+  const fmt = document.getElementById('fmt-select').value;
+  addLog(`Démarrage encodage : ${fmt}`, 'info');
+  try {
+    const res = await fetch('/encode', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({format: fmt})
+    });
+    const data = await res.json();
+    if (data.error) addLog('Erreur : ' + data.error, 'err');
+    else { addLog('Encodage lancé', 'ok'); refreshStatus(); }
+  } catch(e) { addLog('Erreur réseau : ' + e.message, 'err'); }
+});
+
+document.getElementById('btn-cancel').addEventListener('click', async () => {
+  addLog('Annulation demandée...', 'warn');
+  try {
+    await fetch('/cancel', {method: 'POST'});
+    addLog('Signal annulation envoyé', 'warn');
+  } catch(e) {}
+});
+
+function downloadFile(fmt) {
+  window.open('/download/' + fmt, '_blank');
+}
+
+// ── LOG ────────────────────────────────────────────────
+function addLog(msg, cls = '') {
+  const log = document.getElementById('log');
+  const ts  = new Date().toLocaleTimeString('fr-FR');
+  const div = document.createElement('div');
+  if (cls) div.className = 'log-' + cls;
+  div.textContent = `[${ts}] ${msg}`;
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+}
+
+addLog('F04 EDICTA Monitor initialisé', 'info');
+</script>
+</body>
+</html>
