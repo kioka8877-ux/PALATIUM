@@ -94,6 +94,22 @@
       font-size: 10px; color: #c9a84c; letter-spacing: 2px; z-index: 101;
       text-transform: uppercase;
     }
+
+    #placement-popup {
+      position: fixed; background: rgba(8,8,16,0.96);
+      border: 1px solid #c9a84c; border-radius: 4px;
+      padding: 10px; z-index: 200; display: none;
+      font-family: 'Courier New', monospace;
+    }
+    #placement-popup .pop-title { color: #c9a84c; margin-bottom: 8px;
+      font-size: 10px; text-transform: uppercase; letter-spacing: 1px; }
+    #placement-popup .pop-btn { display: block; width: 100%; padding: 6px 10px;
+      margin: 3px 0; background: #1e1b2e; border: 1px solid #3a3050;
+      color: #e0d8c8; cursor: pointer; border-radius: 3px;
+      font-family: inherit; font-size: 10px; text-align: left; }
+    #placement-popup .pop-btn:hover { border-color: #c9a84c; color: #c9a84c; }
+    #placement-popup .pop-cancel { color: #6a5a8a; border-color: #2a2840; }
+    .mode-badge.m2 { border-color: #6a9abf !important; color: #6a9abf !important; }
   </style>
 </head>
 <body>
@@ -148,7 +164,7 @@
     <select id="hdri-select"></select>
   </div>
   <div class="row"><label>Toutes portes ouvertes</label>
-    <input type="checkbox" id="doors-all-open" checked>
+    <input type="checkbox" id="doors-all-open">
   </div>
 </div>
 
@@ -182,6 +198,13 @@
 <svg id="crosshair" width="24" height="24" viewBox="0 0 24 24">
   <line x1="12" y1="0" x2="12" y2="24"/><line x1="0" y1="12" x2="24" y2="12"/>
 </svg>
+
+<div id="placement-popup">
+  <div class="pop-title">Placer ici :</div>
+  <button class="pop-btn" id="pop-spawn">⊕ Spawn</button>
+  <button class="pop-btn" id="pop-waypoint">→ Waypoint W1</button>
+  <button class="pop-btn pop-cancel" id="pop-cancel">✕ Annuler</button>
+</div>
 
 <script type="importmap">
 {
@@ -450,12 +473,155 @@ document.getElementById('cam-height').addEventListener('input', e => {
   document.getElementById('height-disp').textContent = e.target.value + 'm';
 });
 
-// ── KEYBOARD SHORTCUTS ────────────────────────────────────
+// ── MODE (1=Navigation / 2=Placement) ────────────────────
+let navMode = 1;
+const keys  = {};
+const raycaster = new THREE.Raycaster();
+let pendingHit  = null;
+
+function setNavMode(m) {
+  navMode = m;
+  const badge = document.getElementById('mode-badge');
+  if (m === 1) { badge.textContent = 'MODE : NAVIGATION'; badge.classList.remove('m2'); }
+  else         { badge.textContent = 'MODE : PLACEMENT';  badge.classList.add('m2'); }
+}
+
+// ── getFloorY : raycast vers le bas pour trouver le sol ──────
+function getFloorY(x, z) {
+  const ray = new THREE.Raycaster(
+    new THREE.Vector3(x, 50, z), new THREE.Vector3(0, -1, 0)
+  );
+  const meshes = [];
+  if (state.model) state.model.traverse(n => { if (n.isMesh) meshes.push(n); });
+  const hits  = ray.intersectObjects(meshes, false);
+  const floor = hits.filter(h => h.face && Math.abs(h.face.normal.y) > 0.7);
+  if (floor.length) return floor[0].point.y;
+  if (hits.length)  return hits[0].point.y;
+  return 0;
+}
+
+// ── Double-clic → popup placement ────────────────────────────
+const canvas = document.getElementById('c');
+canvas.addEventListener('dblclick', e => {
+  if (navMode !== 2) return;
+  const rect  = canvas.getBoundingClientRect();
+  const mouse = new THREE.Vector2(
+    ((e.clientX - rect.left) / rect.width)  * 2 - 1,
+   -((e.clientY - rect.top)  / rect.height) * 2 + 1
+  );
+  raycaster.setFromCamera(mouse, camera);
+  const meshes = [];
+  if (state.model) state.model.traverse(n => { if (n.isMesh) meshes.push(n); });
+  const hits = raycaster.intersectObjects(meshes, false);
+  if (!hits.length) { setStatus('Vise une surface du modèle'); return; }
+  pendingHit = hits[0].point.clone();
+  const popup = document.getElementById('placement-popup');
+  document.getElementById('pop-waypoint').textContent =
+    '→ Waypoint W' + (state.waypoints.length + 1);
+  popup.style.left    = Math.min(e.clientX + 8, window.innerWidth  - 150) + 'px';
+  popup.style.top     = Math.min(e.clientY + 8, window.innerHeight - 110) + 'px';
+  popup.style.display = 'block';
+});
+
+function hidePopup() {
+  document.getElementById('placement-popup').style.display = 'none';
+  pendingHit = null;
+}
+document.getElementById('pop-cancel').addEventListener('click', hidePopup);
+
+document.getElementById('pop-spawn').addEventListener('click', () => {
+  if (!pendingHit) return;
+  const h      = parseFloat(document.getElementById('cam-height').value) || 1.2;
+  const floorY = getFloorY(pendingHit.x, pendingHit.z);
+  const pos    = { x: +pendingHit.x.toFixed(3), y: +(floorY + h).toFixed(3), z: +pendingHit.z.toFixed(3) };
+  state.spawnPos = pos;
+  ['x','y','z'].forEach(a => document.getElementById('spawn-'+a).value = pos[a]);
+  camera.position.set(pos.x, pos.y, pos.z);
+  controls.target.set(pos.x, pos.y, pos.z - 1);
+  controls.update();
+  if (spawnHelper) scene.remove(spawnHelper);
+  spawnHelper = makeSpawnMarker(pos);
+  scene.add(spawnHelper);
+  setStatus('Spawn défini + téléporté → ' + pos.x + ', ' + pos.y + ', ' + pos.z);
+  hidePopup();
+});
+
+document.getElementById('pop-waypoint').addEventListener('click', () => {
+  if (!pendingHit) return;
+  const h      = parseFloat(document.getElementById('cam-height').value) || 1.2;
+  const floorY = getFloorY(pendingHit.x, pendingHit.z);
+  const wp     = { x: +pendingHit.x.toFixed(3), y: +(floorY + h).toFixed(3), z: +pendingHit.z.toFixed(3) };
+  state.waypoints.push(wp);
+  const marker = makeWpMarker(wp, state.waypoints.length - 1);
+  wpHelpers.push(marker); scene.add(marker);
+  renderWpList();
+  setStatus('WP #' + state.waypoints.length + ' ajouté');
+  hidePopup();
+});
+
+// ── PREVIEW MODE ──────────────────────────────────────────────
+let previewActive = false;
+let previewTimer  = null;
+
+function startPreview() {
+  const path = [];
+  if (state.spawnPos) path.push({...state.spawnPos});
+  state.waypoints.forEach(wp => path.push({...wp}));
+  if (path.length < 2) { setStatus('Spawn + au moins 1 WP requis pour la preview'); return; }
+  path.push({...path[0]});
+  previewActive    = true;
+  controls.enabled = false;
+  setStatus('▶ PREVIEW — P ou Échap pour arrêter');
+  camera.position.set(path[0].x, path[0].y, path[0].z);
+  camera.lookAt(path[1].x, path[1].y, path[1].z);
+  animateSeg(path, 0);
+}
+
+function stopPreview() {
+  previewActive    = false;
+  controls.enabled = true;
+  if (previewTimer) { clearTimeout(previewTimer); previewTimer = null; }
+  controls.target.set(camera.position.x, camera.position.y, camera.position.z - 1);
+  controls.update();
+  setStatus('■ Preview arrêtée');
+}
+
+function animateSeg(path, i) {
+  if (!previewActive || i + 1 >= path.length) { stopPreview(); return; }
+  const from = path[i], to = path[i + 1];
+  const dur  = 1800;
+  const t0   = performance.now();
+  function step(now) {
+    if (!previewActive) return;
+    const t = Math.min((now - t0) / dur, 1);
+    const e = t < 0.5 ? 2*t*t : -1 + (4 - 2*t)*t;
+    camera.position.set(
+      from.x + (to.x - from.x) * e,
+      from.y + (to.y - from.y) * e,
+      from.z + (to.z - from.z) * e
+    );
+    camera.lookAt(to.x, to.y, to.z);
+    if (t < 1) requestAnimationFrame(step);
+    else previewTimer = setTimeout(() => animateSeg(path, i + 1), 600);
+  }
+  requestAnimationFrame(step);
+}
+
+// ── KEYBOARD SHORTCUTS ────────────────────────────────────────
 window.addEventListener('keydown', e => {
-  if (e.key === 's' || e.key === 'S') setSpawn();
-  if (e.key === 'w' || e.key === 'W') addWaypoint();
+  keys[e.key] = true;
+  if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) e.preventDefault();
+  if (e.key === 'Escape') { stopPreview(); hidePopup(); return; }
+  if (e.key === 'p' || e.key === 'P') { if (previewActive) stopPreview(); else startPreview(); return; }
+  if (e.key === '1') { setNavMode(1); return; }
+  if (e.key === '2') { setNavMode(2); return; }
+  if (navMode === 1) {
+    if (e.key === 's' || e.key === 'S') setSpawn();
+    if (e.key === 'w' || e.key === 'W') addWaypoint();
+  }
   if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); saveConfigs(); }
 });
+window.addEventListener('keyup', e => { keys[e.key] = false; });
 
 // ── SAVE ─────────────────────────────────────────────────
 async function saveConfigs() {
@@ -530,6 +696,21 @@ resize();
 function animate() {
   requestAnimationFrame(animate);
   controls.update();
+
+  // Deplacement clavier : fleches + E/Q
+  if (!previewActive) {
+    const spd   = 0.06;
+    const fwd   = new THREE.Vector3(); camera.getWorldDirection(fwd); fwd.y = 0; fwd.normalize();
+    const right = new THREE.Vector3().crossVectors(fwd, new THREE.Vector3(0,1,0)).normalize();
+    const mv    = new THREE.Vector3();
+    if (keys['ArrowUp'])    mv.addScaledVector(fwd,    spd);
+    if (keys['ArrowDown'])  mv.addScaledVector(fwd,   -spd);
+    if (keys['ArrowRight']) mv.addScaledVector(right,  spd);
+    if (keys['ArrowLeft'])  mv.addScaledVector(right, -spd);
+    if (keys['e'] || keys['E']) mv.y += spd;
+    if (keys['q'] || keys['Q']) mv.y -= spd;
+    if (mv.lengthSq() > 0) { camera.position.add(mv); controls.target.add(mv); }
+  }
 
   const p = camera.position;
   document.getElementById('cam-pos-display').textContent =
