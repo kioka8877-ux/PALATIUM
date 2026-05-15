@@ -10,7 +10,7 @@ Viewer Three.js interactif. Permet au Magos de configurer la caméra, définir l
 |---------|------|
 | `PAL_F02.ipynb` | Notebook Colab — démarre Flask + ngrok |
 | `pal_f02_flask.py` | Serveur Flask (endpoints REST) |
-| `pal_f02_viewer.html` | Viewer Three.js (caméra, tags, spawn, WP) |
+| `pal_f02_viewer.html` | Viewer Three.js (caméra, tags, spawn, WP, M2) |
 
 ## Inputs
 
@@ -57,13 +57,35 @@ pyngrok>=7.0
 | `/hdri/<filename>` | GET | Sert un fichier HDRI |
 | `/hdri-list` | GET | Liste les HDRI disponibles |
 
-## Viewer — Raccourcis Clavier
+## Viewer — Modes et Raccourcis
+
+### Mode 1 — Navigation (défaut)
 
 | Touche | Action |
 |--------|--------|
-| `S` | Définir le Spawn à la position caméra actuelle |
-| `W` | Ajouter un Waypoint à la position caméra |
+| `1` | Activer Mode Navigation |
+| `Fleche Haut/Bas` | Avancer / Reculer |
+| `Fleche Gauche/Droite` | Strafe gauche / droite |
+| `E` | Monter |
+| `Q` | Descendre |
+| `S` | Définir Spawn à la position actuelle |
+| `W` | Ajouter Waypoint à la position actuelle |
 | `Ctrl+S` | Sauvegarder les configs |
+
+### Mode 2 — Placement (M2)
+
+| Touche / Action | Résultat |
+|-----------------|---------|
+| `2` | Activer Mode Placement (badge bleu) |
+| Double-clic sur surface | Popup Spawn / Waypoint / Annuler |
+| Popup → Spawn | Téléporte la caméra, Y = sol + hauteur slider |
+| Popup → Waypoint | Pose WP auto-numéroté, Y = sol + hauteur slider |
+| `P` | Lancer preview du parcours (spawn → WP1 → … → spawn) |
+| `P` ou `Echap` | Stopper la preview |
+| `1` | Retour Mode Navigation |
+
+### getFloorY
+En Mode 2, un raycast vertical est tiré depuis Y=50 vers le bas au point cliqué. Le Y retenu est `sol_détecté + slider Hauteur`, peu importe la hauteur de la caméra au moment du clic.
 
 ## Schéma creative_config.json
 
@@ -80,8 +102,8 @@ pyngrok>=7.0
     "ambient_mode": "GOLDEN_HOUR",
     "hdri_file": "golden_hour.hdr",
     "lamps_override": [{"name": "Lustre_Salon", "enabled": true, "intensity": 0.8}],
-    "doors_all_open": true,
-    "doors_override": []
+    "doors_all_open": false,
+    "doors_override": [{"name": "Door_01", "open": false}]
   }
 }
 ```
