@@ -20,6 +20,7 @@
 | 1 | 2026-05-15 | AURUM-PRIME | F01_GENITOR/OUT | F02_OCULUS/IN | `project_scene_config.json`, `tags_draft.json` | ✅ | ✅ | ✅ Validé |
 | 2 | 2026-05-15 | AURUM-PRIME | F01_GENITOR/OUT | F03_SCRIPTORIUM/IN | `project_scene_config.json` | ✅ | ✅ | ✅ Validé |
 | 3 | 2026-05-15 | AURUM-PRIME | F01_GENITOR/OUT | F04_EDICTA/IN | `project_scene_config.json` | ✅ | ✅ | ✅ Validé |
+| 4 | 2026-05-15 | AURUM-PRIME | F02_OCULUS/OUT | F03_SCRIPTORIUM/IN | `creative_config.json`, `tags_config.json` | ✅ | ✅ | ✅ Validé |
 
 ---
 
@@ -49,8 +50,8 @@ SHARED/HDRI/ ──────────────────────�
 F01 GENITOR ──► project_scene_config.json ──────────► F02 ✅, F03 ✅, F04 ✅
 F01 GENITOR ──► tags_draft.json ────────────────────► F02 ✅
 
-F02 OCULUS ──► creative_config.json ────────────────► F03
-F02 OCULUS ──► tags_config.json ────────────────────► F03
+F02 OCULUS ──► creative_config.json ────────────────► F03 ✅
+F02 OCULUS ──► tags_config.json ────────────────────► F03 ✅
 
 F03 SCRIPTORIUM ──► OUT_FRAMES/ ────────────────────► F04
 
