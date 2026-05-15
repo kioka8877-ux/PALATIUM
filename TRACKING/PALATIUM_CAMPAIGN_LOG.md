@@ -7,8 +7,8 @@
 
 | Frégate | Nom | Statut | Date Scellage |
 |---------|-----|--------|---------------|
-| F01 | GENITOR | ⚪ EN ATTENTE | — |
-| F02 | OCULUS | ⚪ EN ATTENTE | — |
+| F01 | GENITOR | 🟢 SCELLÉE | 2026-05-15 |
+| F02 | OCULUS | 🟡 En forge | — |
 | F03 | SCRIPTORIUM | ⚪ EN ATTENTE | — |
 | F04 | EDICTA | ⚪ EN ATTENTE | — |
 | — | L'ARBITRE | ⚪ EN ATTENTE | — |
@@ -24,13 +24,16 @@
 | 2026-05-13 | FLOTTE | ALPHA | Cahier des charges V1 validé — brainstorming terminé | ✅ |
 | 2026-05-13 | FLOTTE | ALPHA | Architecture 4 frégates validée | ✅ |
 | 2026-05-13 | FLOTTE | ALPHA | Repo GitHub créé — documentation initiale poussée | ✅ |
+| 2026-05-15 | F01 | TEST | F01 GENITOR — Tests production validés | ✅ |
+| 2026-05-15 | F01 | SCELLAGE | F01 GENITOR — SCELLÉE. Transit F01→F02/F03/F04 exécuté | ✅ |
+| 2026-05-15 | F02 | FORGE | Début forge F02 OCULUS | 🟡 |
 
 ---
 
 ## COMPTEUR DE GUERRE
 
 ```
-Forge des Frégates : [░░░░░░░░░░] 0/4 Frégates Scellées (0%)
+Forge des Frégates : [██░░░░░░░░] 1/4 Frégates Scellées (25%)
 L'ARBITRE          : [░░░░░░░░░░] En attente
 Fleet Seal         : [░░░░░░░░░░] En attente — Test E2E requis
 Objectif           : Fleet Seal Certificate + 1ère villa rendue
@@ -44,47 +47,41 @@ Objectif           : Fleet Seal Certificate + 1ère villa rendue
 [maison.glb]
      │
      ▼
-[F01 GENITOR] ──► project_scene_config.json + tags_draft.json
+[F01 GENITOR] ──► project_scene_config.json + tags_draft.json   🟢 SCELLÉE
      │
      ▼
-[F02 OCULUS] ──► creative_config.json + tags_config.json
+[F02 OCULUS] ──► creative_config.json + tags_config.json        🟡 En forge
      │
      ▼
-[F03 SCRIPTORIUM] ──► OUT_FRAMES/frame_XXXXX.png
+[F03 SCRIPTORIUM] ──► OUT_FRAMES/frame_XXXXX.png               ⚪ En attente
      │
      ▼
-[F04 EDICTA] ──► shorts_vertical.mp4 + youtube_horizontal.mp4
+[F04 EDICTA] ──► shorts_vertical.mp4 + youtube_horizontal.mp4  ⚪ En attente
 ```
 
 ---
 
-## FRÉGATE F01 — GENITOR (EN ATTENTE)
+## FRÉGATE F01 — GENITOR 🟢 SCELLÉE
 
 ### Mission
 Initialiser le projet Drive, analyser le GLB et produire les configs de base.
 
-### Composants à Forger
-- ⚪ `PAL_F01.ipynb` — Notebook principal Colab
-- ⚪ `pal_f01_genesis.py` — Création structure Drive
-- ⚪ `pal_f01_scanner.py` — Scanner GLB (pygltflib) + auto-détection assets
-- ⚪ `README_DEV.md` — Documentation développeur
+### Composants Forgés
+- ✅ `PAL_F01.ipynb` — Notebook principal Colab
+- ✅ `pal_f01_genesis.py` — Création structure Drive
+- ✅ `pal_f01_scanner.py` — Scanner GLB (pygltflib) + auto-détection assets
+- ✅ `README_DEV.md` — Documentation développeur
 
-### Inputs
-```
-IN/
-└── maison.glb    ← Fourni par le Magos dans SHARED/
-```
-
-### Outputs
+### Outputs Produits
 ```
 OUT/
-├── project_scene_config.json   ← Format, FPS, durée, path GLB
-└── tags_draft.json             ← Lampes/vitres/portes détectées + score confiance
+├── project_scene_config.json   ✅ Transféré → F02, F03, F04
+└── tags_draft.json             ✅ Transféré → F02
 ```
 
 ---
 
-## FRÉGATE F02 — OCULUS (EN ATTENTE)
+## FRÉGATE F02 — OCULUS 🟡 En forge
 
 ### Mission
 Servir le viewer Three.js interactif pour configurer caméra, spawn, éclairage et valider les tags.
@@ -98,9 +95,9 @@ Servir le viewer Three.js interactif pour configurer caméra, spawn, éclairage 
 ### Inputs
 ```
 IN/
-├── project_scene_config.json   ← De F01 GENITOR
-├── tags_draft.json             ← De F01 GENITOR
-└── maison.glb                  ← Depuis SHARED/
+├── project_scene_config.json   ✅ Reçu de F01 GENITOR
+├── tags_draft.json             ✅ Reçu de F01 GENITOR
+└── maison.glb                  ← Depuis SHARED/ (manuel)
 ```
 
 ### Outputs
@@ -121,7 +118,7 @@ OUT/
 
 ---
 
-## FRÉGATE F03 — SCRIPTORIUM (EN ATTENTE)
+## FRÉGATE F03 — SCRIPTORIUM ⚪ EN ATTENTE
 
 ### Mission
 Rendre la séquence vidéo frame par frame via Playwright headless sur GPU Colab.
@@ -134,10 +131,10 @@ Rendre la séquence vidéo frame par frame via Playwright headless sur GPU Colab
 ### Inputs
 ```
 IN/
-├── project_scene_config.json   ← De F01 GENITOR
-├── creative_config.json        ← De F02 OCULUS
-├── tags_config.json            ← De F02 OCULUS
-└── maison.glb                  ← Depuis SHARED/
+├── project_scene_config.json   ✅ Reçu de F01 GENITOR
+├── creative_config.json        ← De F02 OCULUS (en attente)
+├── tags_config.json            ← De F02 OCULUS (en attente)
+└── maison.glb                  ← Depuis SHARED/ (manuel)
 ```
 
 ### Outputs
@@ -155,7 +152,7 @@ OUT_FRAMES/
 
 ---
 
-## FRÉGATE F04 — EDICTA (EN ATTENTE)
+## FRÉGATE F04 — EDICTA ⚪ EN ATTENTE
 
 ### Mission
 Assembler la séquence PNG en fichiers MP4 finaux via FFmpeg.
@@ -171,7 +168,7 @@ Assembler la séquence PNG en fichiers MP4 finaux via FFmpeg.
 ```
 IN/
 ├── OUT_FRAMES/                 ← De F03 SCRIPTORIUM
-└── project_scene_config.json   ← De F01 GENITOR
+└── project_scene_config.json   ✅ Reçu de F01 GENITOR
 ```
 
 ### Outputs
@@ -195,6 +192,13 @@ Décisions architecturales majeures actées :
 - Convention nommage GLB remplacée par détection + validation viewer
 - Deux formats de sortie : Shorts + YouTube Horizontal
 - Stack 100% gratuite validée
+
+### 2026-05-15 — Scellage F01
+
+- Tests production passés avec succès
+- Transit F01→F02/F03/F04 exécuté et validé
+- Cellule transit (Étape 9) ajoutée dans PAL_F01.ipynb
+- Passage en forge F02 OCULUS
 
 ---
 
