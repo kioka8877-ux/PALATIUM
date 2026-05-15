@@ -8,8 +8,8 @@
 | Frégate | Nom | Statut | Date Scellage |
 |---------|-----|--------|---------------|
 | F01 | GENITOR | 🟢 SCELLÉE | 2026-05-15 |
-| F02 | OCULUS | 🟡 En forge | — |
-| F03 | SCRIPTORIUM | ⚪ EN ATTENTE | — |
+| F02 | OCULUS | 🟢 SCELLÉE | 2026-05-15 |
+| F03 | SCRIPTORIUM | 🟡 En forge | — |
 | F04 | EDICTA | ⚪ EN ATTENTE | — |
 | — | L'ARBITRE | ⚪ EN ATTENTE | — |
 
@@ -26,14 +26,17 @@
 | 2026-05-13 | FLOTTE | ALPHA | Repo GitHub créé — documentation initiale poussée | ✅ |
 | 2026-05-15 | F01 | TEST | F01 GENITOR — Tests production validés | ✅ |
 | 2026-05-15 | F01 | SCELLAGE | F01 GENITOR — SCELLÉE. Transit F01→F02/F03/F04 exécuté | ✅ |
-| 2026-05-15 | F02 | FORGE | Début forge F02 OCULUS | 🟡 |
+| 2026-05-15 | F02 | FORGE | Début forge F02 OCULUS | ✅ |
+| 2026-05-15 | F02 | TEST | Mode M2 (placement double-clic), getFloorY, preview P, E/Q, fix portes | ✅ |
+| 2026-05-15 | F02 | SCELLAGE | F02 OCULUS — SCELLÉE. Transit F02→F03 exécuté | ✅ |
+| 2026-05-15 | F03 | FORGE | Début forge F03 SCRIPTORIUM | 🟡 |
 
 ---
 
 ## COMPTEUR DE GUERRE
 
 ```
-Forge des Frégates : [██░░░░░░░░] 1/4 Frégates Scellées (25%)
+Forge des Frégates : [████░░░░░░] 2/4 Frégates Scellées (50%)
 L'ARBITRE          : [░░░░░░░░░░] En attente
 Fleet Seal         : [░░░░░░░░░░] En attente — Test E2E requis
 Objectif           : Fleet Seal Certificate + 1ère villa rendue
@@ -50,10 +53,10 @@ Objectif           : Fleet Seal Certificate + 1ère villa rendue
 [F01 GENITOR] ──► project_scene_config.json + tags_draft.json   🟢 SCELLÉE
      │
      ▼
-[F02 OCULUS] ──► creative_config.json + tags_config.json        🟡 En forge
+[F02 OCULUS] ──► creative_config.json + tags_config.json        🟢 SCELLÉE
      │
      ▼
-[F03 SCRIPTORIUM] ──► OUT_FRAMES/frame_XXXXX.png               ⚪ En attente
+[F03 SCRIPTORIUM] ──► OUT_FRAMES/frame_XXXXX.png               🟡 En forge
      │
      ▼
 [F04 EDICTA] ──► shorts_vertical.mp4 + youtube_horizontal.mp4  ⚪ En attente
@@ -81,44 +84,27 @@ OUT/
 
 ---
 
-## FRÉGATE F02 — OCULUS 🟡 En forge
+## FRÉGATE F02 — OCULUS 🟢 SCELLÉE
 
 ### Mission
-Servir le viewer Three.js interactif pour configurer caméra, spawn, éclairage et valider les tags.
+Viewer Three.js interactif pour configurer caméra, spawn, éclairage et valider les tags.
 
-### Composants à Forger
-- ⚪ `PAL_F02.ipynb` — Notebook principal Colab
-- ⚪ `pal_f02_flask.py` — Serveur Flask (endpoints : /info, /save, /status)
-- ⚪ `pal_f02_viewer.html` — Viewer Three.js (panel caméra + panel scène)
-- ⚪ `README_DEV.md` — Documentation développeur
+### Composants Forgés
+- ✅ `PAL_F02.ipynb` — Notebook principal Colab
+- ✅ `pal_f02_flask.py` — Serveur Flask (endpoints REST)
+- ✅ `pal_f02_viewer.html` — Viewer Three.js (caméra, tags, spawn, WP, M2)
+- ✅ `README_DEV.md` — Documentation développeur
 
-### Inputs
-```
-IN/
-├── project_scene_config.json   ✅ Reçu de F01 GENITOR
-├── tags_draft.json             ✅ Reçu de F01 GENITOR
-└── maison.glb                  ← Depuis SHARED/ (manuel)
-```
-
-### Outputs
+### Outputs Produits
 ```
 OUT/
-├── creative_config.json        ← Caméra, spawn, waypoints, HDRI, lampes, portes
-└── tags_config.json            ← Tags validés par le Magos
+├── creative_config.json   ✅ Transféré → F03
+└── tags_config.json       ✅ Transféré → F03
 ```
-
-### Presets Caméra Disponibles
-
-| Preset | Mode | Paramètres Clés |
-|--------|------|-----------------|
-| DRONE | Extérieur | Alt. départ 50m, orbite 270°, Bézier |
-| IPHONE_STAB | Ext./Int. | H=1.7m, gimbal smoothing |
-| DOLLY_PAN | Single Room | FOV 84°, tilt 0°, H=1.2m, Cubic Bézier |
-| WALKTHROUGH | Multi Room | H=1.4m, 1.2m/s, corner 0.5m, CatmullRom |
 
 ---
 
-## FRÉGATE F03 — SCRIPTORIUM ⚪ EN ATTENTE
+## FRÉGATE F03 — SCRIPTORIUM 🟡 En forge
 
 ### Mission
 Rendre la séquence vidéo frame par frame via Playwright headless sur GPU Colab.
@@ -132,23 +118,16 @@ Rendre la séquence vidéo frame par frame via Playwright headless sur GPU Colab
 ```
 IN/
 ├── project_scene_config.json   ✅ Reçu de F01 GENITOR
-├── creative_config.json        ← De F02 OCULUS (en attente)
-├── tags_config.json            ← De F02 OCULUS (en attente)
+├── creative_config.json        ✅ Reçu de F02 OCULUS
+├── tags_config.json            ✅ Reçu de F02 OCULUS
 └── maison.glb                  ← Depuis SHARED/ (manuel)
 ```
 
 ### Outputs
 ```
 OUT_FRAMES/
-└── frame_00001.png ...         ← PNG 16-bit, résolution cible selon format
+└── frame_00001.png ...         ← PNG, résolution cible selon format
 ```
-
-### Résolution viewport Playwright
-
-| Format | Viewport |
-|--------|---------|
-| Shorts | 1080×1920 |
-| YouTube | 3840×2160 |
 
 ---
 
@@ -158,11 +137,11 @@ OUT_FRAMES/
 Assembler la séquence PNG en fichiers MP4 finaux via FFmpeg.
 
 ### Composants à Forger
-- ⚪ `PAL_F04.ipynb` — Notebook principal Colab
-- ⚪ `pal_f04_flask.py` — Serveur Flask (encode, status, cancel, download)
-- ⚪ `pal_f04_pipeline.py` — Pipeline FFmpeg (encode + audio stub + overlay stub)
-- ⚪ `pal_f04_monitor.html` — Monitor HTML progress
-- ⚪ `README_DEV.md` — Documentation développeur
+- ⚪ `PAL_F04.ipynb`
+- ⚪ `pal_f04_flask.py`
+- ⚪ `pal_f04_pipeline.py`
+- ⚪ `pal_f04_monitor.html`
+- ⚪ `README_DEV.md`
 
 ### Inputs
 ```
@@ -174,8 +153,8 @@ IN/
 ### Outputs
 ```
 OUT_FINAL/
-├── shorts_vertical.mp4         ← 1080×1920 / 30 sec / 60 FPS / 15-20 Mbps
-└── youtube_horizontal.mp4      ← 3840×2160 / 1 min 30 / 60 FPS / 40-50 Mbps
+├── shorts_vertical.mp4
+└── youtube_horizontal.mp4
 ```
 
 ---
@@ -183,22 +162,18 @@ OUT_FINAL/
 ## NOTES DE FORGE
 
 ### 2026-05-13 — Séance de Brainstorming
-
-Décisions architecturales majeures actées :
-- WebCodecs abandonné au profit de Playwright + FFmpeg
-- Blender preprocessing éliminé — détection auto dans F01
-- 4 frégates (fusion F01+F02 → GENITOR, fusion F03+F04 → OCULUS, F05 → SCRIPTORIUM, F06 → EDICTA)
-- Spawn et waypoints par clic dans le viewer Three.js
-- Convention nommage GLB remplacée par détection + validation viewer
-- Deux formats de sortie : Shorts + YouTube Horizontal
-- Stack 100% gratuite validée
+Décisions architecturales majeures actées : WebCodecs abandonné, Playwright + FFmpeg, 4 frégates, spawn/waypoints par clic, deux formats de sortie, stack 100% gratuite validée.
 
 ### 2026-05-15 — Scellage F01
+Tests production passés. Transit F01→F02/F03/F04 exécuté et validé.
 
-- Tests production passés avec succès
-- Transit F01→F02/F03/F04 exécuté et validé
-- Cellule transit (Étape 9) ajoutée dans PAL_F01.ipynb
-- Passage en forge F02 OCULUS
+### 2026-05-15 — Scellage F02
+- Mode M2 (placement) : double-clic sur surface → popup Spawn/Waypoint
+- `getFloorY` : raycast vertical, Y forcé à sol + hauteur slider
+- Preview `P` : parcours animé spawn → WP1 → … → spawn
+- `E`/`Q` monter/descendre, `Fleches` strafe/avance
+- Portes fermées par défaut (`doors_all_open: false`)
+- Transit F02→F03 exécuté
 
 ---
 
