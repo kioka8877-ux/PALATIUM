@@ -285,6 +285,7 @@ const state = {
 // Helpers visuels
 const wpHelpers = [];
 let spawnHelper = null;
+let pathLine    = null;
 
 function makeSpawnMarker(pos) {
   const geo = new THREE.SphereGeometry(0.08, 8, 8);
@@ -426,10 +427,108 @@ window.toggleDoor = (i, checked) => {
   state.tags.doors[i].open = checked;
 };
 
+// ── FLOOR Y ───────────────────────────────────────────────
+const ROOF_NAME_PATTERNS = /roof|ceiling|toit|plafond|toiture|cover|top/i;
+
+function isRoofMesh(node) {
+  return ROOF_NAME_PATTERNS.test(node.name || '') ||
+         (node.parent && ROOF_NAME_PATTERNS.test(node.parent.name || ''));
+}
+
+function getFloorY(x, z) {
+  if (!state.model || !state.modelBox) return 0;
+
+  const rayOriginY = state.modelBox.max.y + 1;
+  const ray = new THREE.Raycaster(
+    new THREE.Vector3(x, rayOriginY, z), new THREE.Vector3(0, -1, 0)
+  );
+
+  const meshes = [];
+  state.model.traverse(n => {
+    if (n.isMesh && !isRoofMesh(n)) meshes.push(n);
+  });
+
+  const hits = ray.intersectObjects(meshes, false);
+  const horizontal = hits.filter(h => h.face && Math.abs(h.face.normal.y) > 0.7);
+
+  if (horizontal.length) {
+    const boxH   = state.modelBox.max.y - state.modelBox.min.y;
+    const floorZ = state.modelBox.min.y + boxH * 0.45;
+    const inner  = horizontal.filter(h => h.point.y <= floorZ);
+    if (inner.length)
+      return inner.reduce((a, b) => a.point.y < b.point.y ? a : b).point.y;
+    return horizontal.reduce((a, b) => a.point.y < b.point.y ? a : b).point.y;
+  }
+
+  return state.modelBox.min.y;
+}
+
+// ── PUSH FROM WALLS ───────────────────────────────────────
+// Repousse un point Vector3 à l'écart des murs/objets proches.
+// Lance 8 rayons horizontaux et corrige la position sur 3 passes
+// pour converger même dans les coins (deux murs proches).
+function pushFromWalls(position, safetyDist = 0.4) {
+  if (!state.model) return position;
+
+  const directions = [
+    new THREE.Vector3(1, 0, 0),
+    new THREE.Vector3(-1, 0, 0),
+    new THREE.Vector3(0, 0, 1),
+    new THREE.Vector3(0, 0, -1),
+    new THREE.Vector3(1, 0, 1).normalize(),
+    new THREE.Vector3(-1, 0, 1).normalize(),
+    new THREE.Vector3(1, 0, -1).normalize(),
+    new THREE.Vector3(-1, 0, -1).normalize(),
+  ];
+
+  const rc = new THREE.Raycaster();
+  const meshes = [];
+  state.model.traverse(n => { if (n.isMesh) meshes.push(n); });
+
+  let corrected = position.clone();
+
+  for (let pass = 0; pass < 3; pass++) {
+    const pushVec = new THREE.Vector3();
+    directions.forEach(dir => {
+      rc.set(corrected, dir);
+      const hits = rc.intersectObjects(meshes, false);
+      if (hits.length > 0 && hits[0].distance < safetyDist) {
+        const depth = safetyDist - hits[0].distance;
+        pushVec.addScaledVector(dir.clone().negate(), depth);
+      }
+    });
+    if (pushVec.lengthSq() < 1e-6) break; // convergé
+    corrected.add(pushVec);
+  }
+
+  return corrected;
+}
+
+// ── PATH LINE (trajectoire Catmull visible) ───────────────
+// Redessine la courbe de trajectoire dans la scène à chaque
+// modification de spawn ou waypoints.
+function updatePathLine() {
+  if (pathLine) { scene.remove(pathLine); pathLine = null; }
+
+  const pts = [];
+  if (state.spawnPos) pts.push(new THREE.Vector3(state.spawnPos.x, state.spawnPos.y, state.spawnPos.z));
+  state.waypoints.forEach(wp => pts.push(new THREE.Vector3(wp.x, wp.y, wp.z)));
+  if (pts.length < 2) return;
+  pts.push(pts[0].clone()); // boucle
+
+  const curve   = new THREE.CatmullRomCurve3(pts, false, 'centripetal');
+  const points  = curve.getPoints(120);
+  const geo     = new THREE.BufferGeometry().setFromPoints(points);
+  const mat     = new THREE.LineBasicMaterial({ color: 0xc9a84c, opacity: 0.55, transparent: true });
+  pathLine = new THREE.Line(geo, mat);
+  scene.add(pathLine);
+}
+
 // ── SPAWN & WAYPOINTS ─────────────────────────────────────
 function setSpawn() {
-  const pos = camera.position.clone();
-  state.spawnPos = { x: +pos.x.toFixed(3), y: +pos.y.toFixed(3), z: +pos.z.toFixed(3) };
+  let pos3d = camera.position.clone();
+  pos3d = pushFromWalls(pos3d);
+  state.spawnPos = { x: +pos3d.x.toFixed(3), y: +pos3d.y.toFixed(3), z: +pos3d.z.toFixed(3) };
   document.getElementById('spawn-x').value = state.spawnPos.x;
   document.getElementById('spawn-y').value = state.spawnPos.y;
   document.getElementById('spawn-z').value = state.spawnPos.z;
@@ -437,17 +536,20 @@ function setSpawn() {
   if (spawnHelper) scene.remove(spawnHelper);
   spawnHelper = makeSpawnMarker(state.spawnPos);
   scene.add(spawnHelper);
+  updatePathLine();
   setStatus(`Spawn défini : ${state.spawnPos.x}, ${state.spawnPos.y}, ${state.spawnPos.z}`);
 }
 
 function addWaypoint() {
-  const pos = camera.position.clone();
-  const wp = { x: +pos.x.toFixed(3), y: +pos.y.toFixed(3), z: +pos.z.toFixed(3) };
+  let pos3d = camera.position.clone();
+  pos3d = pushFromWalls(pos3d);
+  const wp = { x: +pos3d.x.toFixed(3), y: +pos3d.y.toFixed(3), z: +pos3d.z.toFixed(3) };
   state.waypoints.push(wp);
   const marker = makeWpMarker(wp, state.waypoints.length - 1);
   wpHelpers.push(marker);
   scene.add(marker);
   renderWpList();
+  updatePathLine();
   setStatus(`WP #${state.waypoints.length} ajouté`);
 }
 
@@ -467,6 +569,7 @@ window.removeWp = (i) => {
   state.waypoints.splice(i, 1);
   if (wpHelpers[i]) { scene.remove(wpHelpers[i]); wpHelpers.splice(i, 1); }
   renderWpList();
+  updatePathLine();
 };
 
 document.getElementById('btn-clear-wp').addEventListener('click', () => {
@@ -474,6 +577,7 @@ document.getElementById('btn-clear-wp').addEventListener('click', () => {
   wpHelpers.forEach(h => scene.remove(h));
   wpHelpers.length = 0;
   renderWpList();
+  updatePathLine();
 });
 
 document.getElementById('btn-set-spawn').addEventListener('click', setSpawn);
@@ -517,49 +621,6 @@ function setNavMode(m) {
   else         { badge.textContent = 'MODE : PLACEMENT';  badge.classList.add('m2'); }
 }
 
-// ── getFloorY : raycast vers le bas — sol intérieur uniquement ──
-const ROOF_NAME_PATTERNS = /roof|ceiling|toit|plafond|toiture|cover|top/i;
-
-function isRoofMesh(node) {
-  return ROOF_NAME_PATTERNS.test(node.name || '') ||
-         (node.parent && ROOF_NAME_PATTERNS.test(node.parent.name || ''));
-}
-
-function getFloorY(x, z) {
-  if (!state.model || !state.modelBox) return 0;
-
-  // Démarrer le ray depuis le haut du bâtiment + marge
-  const rayOriginY = state.modelBox.max.y + 1;
-  const ray = new THREE.Raycaster(
-    new THREE.Vector3(x, rayOriginY, z), new THREE.Vector3(0, -1, 0)
-  );
-
-  // Collecter les meshes en excluant les toits par nom
-  const meshes = [];
-  state.model.traverse(n => {
-    if (n.isMesh && !isRoofMesh(n)) meshes.push(n);
-  });
-
-  const hits = ray.intersectObjects(meshes, false);
-
-  // Garder uniquement les surfaces quasi-horizontales (normales Y > 0.7)
-  const horizontal = hits.filter(h => h.face && Math.abs(h.face.normal.y) > 0.7);
-
-  if (horizontal.length) {
-    // Préférer les surfaces situées dans le tiers inférieur du bâtiment
-    const boxH   = state.modelBox.max.y - state.modelBox.min.y;
-    const floorZ = state.modelBox.min.y + boxH * 0.45; // seuil à 45 % de la hauteur
-    const inner  = horizontal.filter(h => h.point.y <= floorZ);
-    if (inner.length)
-      return inner.reduce((a, b) => a.point.y < b.point.y ? a : b).point.y;
-    // Fallback : la surface la plus basse parmi toutes les horizontales
-    return horizontal.reduce((a, b) => a.point.y < b.point.y ? a : b).point.y;
-  }
-
-  // Aucune surface horizontale : retourner le bas du bâtiment
-  return state.modelBox.min.y;
-}
-
 // ── Double-clic → popup placement ────────────────────────────
 canvas.addEventListener('dblclick', e => {
   if (navMode !== 2) return;
@@ -592,7 +653,9 @@ document.getElementById('pop-spawn').addEventListener('click', () => {
   if (!pendingHit) return;
   const h      = parseFloat(document.getElementById('cam-height').value) || 1.2;
   const floorY = getFloorY(pendingHit.x, pendingHit.z);
-  const pos    = { x: +pendingHit.x.toFixed(3), y: +(floorY + h).toFixed(3), z: +pendingHit.z.toFixed(3) };
+  let pos3d    = new THREE.Vector3(pendingHit.x, floorY + h, pendingHit.z);
+  pos3d        = pushFromWalls(pos3d);
+  const pos    = { x: +pos3d.x.toFixed(3), y: +pos3d.y.toFixed(3), z: +pos3d.z.toFixed(3) };
   state.spawnPos = pos;
   ['x','y','z'].forEach(a => document.getElementById('spawn-'+a).value = pos[a]);
   camera.position.set(pos.x, pos.y, pos.z);
@@ -601,6 +664,7 @@ document.getElementById('pop-spawn').addEventListener('click', () => {
   if (spawnHelper) scene.remove(spawnHelper);
   spawnHelper = makeSpawnMarker(pos);
   scene.add(spawnHelper);
+  updatePathLine();
   setStatus('Spawn défini + téléporté → ' + pos.x + ', ' + pos.y + ', ' + pos.z);
   hidePopup();
 });
@@ -609,31 +673,64 @@ document.getElementById('pop-waypoint').addEventListener('click', () => {
   if (!pendingHit) return;
   const h      = parseFloat(document.getElementById('cam-height').value) || 1.2;
   const floorY = getFloorY(pendingHit.x, pendingHit.z);
-  const wp     = { x: +pendingHit.x.toFixed(3), y: +(floorY + h).toFixed(3), z: +pendingHit.z.toFixed(3) };
+  let pos3d    = new THREE.Vector3(pendingHit.x, floorY + h, pendingHit.z);
+  pos3d        = pushFromWalls(pos3d);
+  const wp     = { x: +pos3d.x.toFixed(3), y: +pos3d.y.toFixed(3), z: +pos3d.z.toFixed(3) };
   state.waypoints.push(wp);
   const marker = makeWpMarker(wp, state.waypoints.length - 1);
   wpHelpers.push(marker); scene.add(marker);
   renderWpList();
+  updatePathLine();
   setStatus('WP #' + state.waypoints.length + ' ajouté');
   hidePopup();
 });
 
-// ── PREVIEW MODE ──────────────────────────────────────────────
+// ── PREVIEW MODE (CatmullRomCurve3) ───────────────────────
+// La preview utilise la même courbe Catmull que F03 SCRIPTORIUM.
+// Ce que tu vois ici = exactement ce qui sera rendu frame par frame.
 let previewActive = false;
 let previewTimer  = null;
 
 function startPreview() {
-  const path = [];
-  if (state.spawnPos) path.push({...state.spawnPos});
-  state.waypoints.forEach(wp => path.push({...wp}));
-  if (path.length < 2) { setStatus('Spawn + au moins 1 WP requis pour la preview'); return; }
-  path.push({...path[0]});
+  const rawPath = [];
+  if (state.spawnPos) rawPath.push(new THREE.Vector3(state.spawnPos.x, state.spawnPos.y, state.spawnPos.z));
+  state.waypoints.forEach(wp => rawPath.push(new THREE.Vector3(wp.x, wp.y, wp.z)));
+  if (rawPath.length < 2) { setStatus('Spawn + au moins 1 WP requis pour la preview'); return; }
+  rawPath.push(rawPath[0].clone()); // boucle
+
+  const curve = new THREE.CatmullRomCurve3(rawPath, false, 'centripetal');
+
   previewActive    = true;
   controls.enabled = false;
-  setStatus('▶ PREVIEW — P ou Échap pour arrêter');
-  camera.position.set(path[0].x, path[0].y, path[0].z);
-  camera.lookAt(path[1].x, path[1].y, path[1].z);
-  animateSeg(path, 0);
+  setStatus('▶ PREVIEW Catmull — P ou Échap pour arrêter');
+
+  camera.position.copy(rawPath[0]);
+
+  const totalDuration = (parseFloat(document.getElementById('vid-duration').value) || 10) * 1000;
+  const t0   = performance.now();
+  const yWarn = document.getElementById('y-warning');
+
+  function step(now) {
+    if (!previewActive) return;
+    const t    = Math.min((now - t0) / totalDuration, 1);
+    const pos  = curve.getPoint(t);
+    camera.position.copy(pos);
+
+    // Regard vers le point légèrement en avance sur la courbe
+    const tNext = Math.min(t + 0.005, 1);
+    const ahead = curve.getPoint(tNext);
+    camera.lookAt(ahead);
+
+    if (state.modelBox && camera.position.y > state.modelBox.max.y * 0.85)
+      yWarn.style.display = 'block';
+    else
+      yWarn.style.display = 'none';
+
+    if (t < 1) requestAnimationFrame(step);
+    else { yWarn.style.display = 'none'; stopPreview(); }
+  }
+
+  requestAnimationFrame(step);
 }
 
 function stopPreview() {
@@ -643,38 +740,6 @@ function stopPreview() {
   controls.target.set(camera.position.x, camera.position.y, camera.position.z - 1);
   controls.update();
   setStatus('■ Preview arrêtée');
-}
-
-function animateSeg(path, i) {
-  if (!previewActive || i + 1 >= path.length) { stopPreview(); return; }
-  const from = path[i], to = path[i + 1];
-  const totalDuration = (parseFloat(document.getElementById('vid-duration').value) || 10) * 1000;
-  const totalSegs = path.length - 1;
-  const dur = totalDuration / totalSegs;
-  const t0  = performance.now();
-  const yWarn = document.getElementById('y-warning');
-  function step(now) {
-    if (!previewActive) return;
-    const t = Math.min((now - t0) / dur, 1);
-    const e = t < 0.5 ? 2*t*t : -1 + (4 - 2*t)*t;
-    camera.position.set(
-      from.x + (to.x - from.x) * e,
-      from.y + (to.y - from.y) * e,
-      from.z + (to.z - from.z) * e
-    );
-    camera.lookAt(to.x, to.y, to.z);
-    // Validation Y
-    if (state.modelBox && camera.position.y > state.modelBox.max.y * 0.85)
-      yWarn.style.display = 'block';
-    else
-      yWarn.style.display = 'none';
-    if (t < 1) requestAnimationFrame(step);
-    else {
-      yWarn.style.display = 'none';
-      animateSeg(path, i + 1);
-    }
-  }
-  requestAnimationFrame(step);
 }
 
 // ── KEYBOARD SHORTCUTS ────────────────────────────────────────
@@ -824,4 +889,3 @@ animate();
 </script>
 </body>
 </html>
-
