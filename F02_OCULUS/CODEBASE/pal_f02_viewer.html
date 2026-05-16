@@ -518,25 +518,46 @@ function setNavMode(m) {
 }
 
 // ── getFloorY : raycast vers le bas — sol intérieur uniquement ──
+const ROOF_NAME_PATTERNS = /roof|ceiling|toit|plafond|toiture|cover|top/i;
+
+function isRoofMesh(node) {
+  return ROOF_NAME_PATTERNS.test(node.name || '') ||
+         (node.parent && ROOF_NAME_PATTERNS.test(node.parent.name || ''));
+}
+
 function getFloorY(x, z) {
+  if (!state.model || !state.modelBox) return 0;
+
+  // Démarrer le ray depuis le haut du bâtiment + marge
+  const rayOriginY = state.modelBox.max.y + 1;
   const ray = new THREE.Raycaster(
-    new THREE.Vector3(x, 50, z), new THREE.Vector3(0, -1, 0)
+    new THREE.Vector3(x, rayOriginY, z), new THREE.Vector3(0, -1, 0)
   );
+
+  // Collecter les meshes en excluant les toits par nom
   const meshes = [];
-  if (state.model) state.model.traverse(n => { if (n.isMesh) meshes.push(n); });
+  state.model.traverse(n => {
+    if (n.isMesh && !isRoofMesh(n)) meshes.push(n);
+  });
+
   const hits = ray.intersectObjects(meshes, false);
+
+  // Garder uniquement les surfaces quasi-horizontales (normales Y > 0.7)
   const horizontal = hits.filter(h => h.face && Math.abs(h.face.normal.y) > 0.7);
+
   if (horizontal.length) {
-    if (state.modelBox) {
-      const midY = (state.modelBox.min.y + state.modelBox.max.y) * 0.5;
-      const inner = horizontal.filter(h => h.point.y <= midY);
-      if (inner.length)
-        return inner.reduce((a, b) => a.point.y < b.point.y ? a : b).point.y;
-    }
+    // Préférer les surfaces situées dans le tiers inférieur du bâtiment
+    const boxH   = state.modelBox.max.y - state.modelBox.min.y;
+    const floorZ = state.modelBox.min.y + boxH * 0.45; // seuil à 45 % de la hauteur
+    const inner  = horizontal.filter(h => h.point.y <= floorZ);
+    if (inner.length)
+      return inner.reduce((a, b) => a.point.y < b.point.y ? a : b).point.y;
+    // Fallback : la surface la plus basse parmi toutes les horizontales
     return horizontal.reduce((a, b) => a.point.y < b.point.y ? a : b).point.y;
   }
-  if (hits.length) return hits[hits.length - 1].point.y;
-  return 0;
+
+  // Aucune surface horizontale : retourner le bas du bâtiment
+  return state.modelBox.min.y;
 }
 
 // ── Double-clic → popup placement ────────────────────────────
@@ -651,7 +672,7 @@ function animateSeg(path, i) {
     if (t < 1) requestAnimationFrame(step);
     else {
       yWarn.style.display = 'none';
-      previewTimer = setTimeout(() => animateSeg(path, i + 1), 200);
+      animateSeg(path, i + 1);
     }
   }
   requestAnimationFrame(step);
