@@ -110,6 +110,18 @@
     #placement-popup .pop-btn:hover { border-color: #c9a84c; color: #c9a84c; }
     #placement-popup .pop-cancel { color: #6a5a8a; border-color: #2a2840; }
     .mode-badge.m2 { border-color: #6a9abf !important; color: #6a9abf !important; }
+
+    /* ── FORMAT OVERLAY ── */
+    #format-overlay { position: fixed; inset: 0; pointer-events: none; z-index: 90; }
+    #format-overlay .ov-bar { position: absolute; background: rgba(0,0,0,0.55); }
+
+    /* ── Y WARNING ── */
+    #y-warning {
+      display: none; position: fixed; top: 40px; left: 50%; transform: translateX(-50%);
+      background: rgba(180,30,30,0.92); border: 1px solid #ff4040;
+      color: #fff; padding: 5px 14px; font-size: 11px; letter-spacing: 1px;
+      z-index: 200; text-transform: uppercase; white-space: nowrap;
+    }
   </style>
 </head>
 <body>
@@ -141,6 +153,20 @@
   <button class="btn" id="btn-add-wp">+ Ajouter Waypoint (W)</button>
   <div id="wp-list"></div>
   <button class="btn btn-danger" id="btn-clear-wp">✕ Effacer tous les WP</button>
+
+  <h3>Durée vidéo</h3>
+  <div class="row"><label>Durée</label>
+    <input type="range" id="vid-duration" min="3" max="30" value="10" step="1">
+    <span class="val-display" id="dur-disp">10s</span>
+  </div>
+
+  <h3>Preview format</h3>
+  <div class="row"><label>Format</label>
+    <select id="preview-format">
+      <option value="shorts">SHORTS (9:16)</option>
+      <option value="youtube">YOUTUBE (16:9)</option>
+    </select>
+  </div>
 
   <h3>Caméra</h3>
   <div class="row"><label>FOV</label>
@@ -199,6 +225,9 @@
   <line x1="12" y1="0" x2="12" y2="24"/><line x1="0" y1="12" x2="24" y2="12"/>
 </svg>
 
+<div id="format-overlay"></div>
+<div id="y-warning">⚠ Caméra hors bâtiment</div>
+
 <div id="placement-popup">
   <div class="pop-title">Placer ici :</div>
   <button class="pop-btn" id="pop-spawn">⊕ Spawn</button>
@@ -249,7 +278,8 @@ const state = {
   model: null,
   hdriList: [],
   selectedTag: null,
-  mode: 'navigate'  // 'navigate' | 'spawn' | 'waypoint'
+  mode: 'navigate',  // 'navigate' | 'spawn' | 'waypoint'
+  modelBox: null
 };
 
 // Helpers visuels
@@ -300,6 +330,7 @@ async function loadGLB() {
 
       // Centrer + cadrer
       const box = new THREE.Box3().setFromObject(gltf.scene);
+      state.modelBox = box;
       const center = box.getCenter(new THREE.Vector3());
       const size = box.getSize(new THREE.Vector3());
       const maxDim = Math.max(size.x, size.y, size.z);
@@ -486,17 +517,25 @@ function setNavMode(m) {
   else         { badge.textContent = 'MODE : PLACEMENT';  badge.classList.add('m2'); }
 }
 
-// ── getFloorY : raycast vers le bas pour trouver le sol ──────
+// ── getFloorY : raycast vers le bas — sol intérieur uniquement ──
 function getFloorY(x, z) {
   const ray = new THREE.Raycaster(
     new THREE.Vector3(x, 50, z), new THREE.Vector3(0, -1, 0)
   );
   const meshes = [];
   if (state.model) state.model.traverse(n => { if (n.isMesh) meshes.push(n); });
-  const hits  = ray.intersectObjects(meshes, false);
-  const floor = hits.filter(h => h.face && Math.abs(h.face.normal.y) > 0.7);
-  if (floor.length) return floor[0].point.y;
-  if (hits.length)  return hits[0].point.y;
+  const hits = ray.intersectObjects(meshes, false);
+  const horizontal = hits.filter(h => h.face && Math.abs(h.face.normal.y) > 0.7);
+  if (horizontal.length) {
+    if (state.modelBox) {
+      const midY = (state.modelBox.min.y + state.modelBox.max.y) * 0.5;
+      const inner = horizontal.filter(h => h.point.y <= midY);
+      if (inner.length)
+        return inner.reduce((a, b) => a.point.y < b.point.y ? a : b).point.y;
+    }
+    return horizontal.reduce((a, b) => a.point.y < b.point.y ? a : b).point.y;
+  }
+  if (hits.length) return hits[hits.length - 1].point.y;
   return 0;
 }
 
@@ -589,8 +628,11 @@ function stopPreview() {
 function animateSeg(path, i) {
   if (!previewActive || i + 1 >= path.length) { stopPreview(); return; }
   const from = path[i], to = path[i + 1];
-  const dur  = 1800;
-  const t0   = performance.now();
+  const totalDuration = (parseFloat(document.getElementById('vid-duration').value) || 10) * 1000;
+  const totalSegs = path.length - 1;
+  const dur = totalDuration / totalSegs;
+  const t0  = performance.now();
+  const yWarn = document.getElementById('y-warning');
   function step(now) {
     if (!previewActive) return;
     const t = Math.min((now - t0) / dur, 1);
@@ -601,8 +643,16 @@ function animateSeg(path, i) {
       from.z + (to.z - from.z) * e
     );
     camera.lookAt(to.x, to.y, to.z);
+    // Validation Y
+    if (state.modelBox && camera.position.y > state.modelBox.max.y * 0.85)
+      yWarn.style.display = 'block';
+    else
+      yWarn.style.display = 'none';
     if (t < 1) requestAnimationFrame(step);
-    else previewTimer = setTimeout(() => animateSeg(path, i + 1), 600);
+    else {
+      yWarn.style.display = 'none';
+      previewTimer = setTimeout(() => animateSeg(path, i + 1), 200);
+    }
   }
   requestAnimationFrame(step);
 }
@@ -631,6 +681,7 @@ async function saveConfigs() {
   const ambientMode = document.getElementById('ambient-mode').value;
   const doorsAllOpen = document.getElementById('doors-all-open').checked;
   const hdri = document.getElementById('hdri-select').value;
+  const duration = parseFloat(document.getElementById('vid-duration').value) || 10;
 
   const creativeConfig = {
     camera: {
@@ -640,6 +691,7 @@ async function saveConfigs() {
       spawn_pos: state.spawnPos,
       waypoints: state.waypoints
     },
+    duration,
     lighting: {
       ambient_mode: ambientMode,
       hdri_file: hdri,
@@ -679,6 +731,29 @@ async function saveConfigs() {
     document.getElementById('save-status').textContent = '❌ ' + e.message;
   }
 }
+
+document.getElementById('vid-duration').addEventListener('input', e => {
+  document.getElementById('dur-disp').textContent = e.target.value + 's';
+});
+
+function updateFormatOverlay() {
+  const fmt = document.getElementById('preview-format').value;
+  const overlay = document.getElementById('format-overlay');
+  overlay.innerHTML = '';
+  if (fmt === 'shorts') {
+    const w = window.innerWidth, h = window.innerHeight;
+    const targetW = Math.round(h * 9 / 16);
+    if (targetW < w) {
+      const bw = Math.round((w - targetW) / 2);
+      overlay.innerHTML =
+        '<div class="ov-bar" style="left:0;top:0;width:' + bw + 'px;height:100%"></div>' +
+        '<div class="ov-bar" style="right:0;top:0;width:' + bw + 'px;height:100%"></div>';
+    }
+  }
+}
+document.getElementById('preview-format').addEventListener('change', updateFormatOverlay);
+window.addEventListener('resize', updateFormatOverlay);
+updateFormatOverlay();
 
 document.getElementById('btn-save').addEventListener('click', saveConfigs);
 
