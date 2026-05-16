@@ -561,7 +561,6 @@ function getFloorY(x, z) {
 }
 
 // ── Double-clic → popup placement ────────────────────────────
-const canvas = document.getElementById('c');
 canvas.addEventListener('dblclick', e => {
   if (navMode !== 2) return;
   const rect  = canvas.getBoundingClientRect();
@@ -825,3 +824,4 @@ animate();
 </script>
 </body>
 </html>
+
