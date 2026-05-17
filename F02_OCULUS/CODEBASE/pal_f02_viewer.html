@@ -716,10 +716,10 @@ function startPreview() {
     const pos  = curve.getPoint(t);
     camera.position.copy(pos);
 
-    // Regard vers le point légèrement en avance sur la courbe
-    const tNext = Math.min(t + 0.005, 1);
-    const ahead = curve.getPoint(tNext);
-    camera.lookAt(ahead);
+    // Phase 2 — Tangente exacte + alignement horizontal forcé (pas de roulis)
+    camera.up.set(0, 1, 0);
+    const tangent = curve.getTangent(t).normalize();
+    camera.lookAt(pos.clone().add(tangent));
 
     if (state.modelBox && camera.position.y > state.modelBox.max.y * 0.85)
       yWarn.style.display = 'block';
@@ -773,6 +773,9 @@ async function saveConfigs() {
       mode: preset,
       fov,
       height,
+      force_horizontal_alignment: true,
+      wall_clearance_meters: 0.4,
+      trajectory_interpolation: 'CatmullRomCurve3',
       spawn_pos: state.spawnPos,
       waypoints: state.waypoints
     },
@@ -889,3 +892,4 @@ animate();
 </script>
 </body>
 </html>
+
