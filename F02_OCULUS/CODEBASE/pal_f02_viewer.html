@@ -122,6 +122,39 @@
       color: #fff; padding: 5px 14px; font-size: 11px; letter-spacing: 1px;
       z-index: 200; text-transform: uppercase; white-space: nowrap;
     }
+
+    /* ── HEIGHT PICKER ── */
+    #height-picker {
+      position: fixed; background: rgba(8,8,16,0.97);
+      border: 1px solid #c9a84c; border-radius: 4px;
+      padding: 12px 14px; z-index: 300; display: none;
+      font-family: 'Courier New', monospace; min-width: 160px;
+    }
+    #height-picker .hp-title {
+      color: #c9a84c; font-size: 10px; text-transform: uppercase;
+      letter-spacing: 1px; margin-bottom: 10px;
+    }
+    #height-picker .hp-btn {
+      display: block; width: 100%; padding: 7px 10px; margin: 4px 0;
+      background: #1e1b2e; border: 1px solid #3a3050;
+      color: #e0d8c8; cursor: pointer; border-radius: 3px;
+      font-family: inherit; font-size: 11px; text-align: left;
+      transition: all 0.15s;
+    }
+    #height-picker .hp-btn:hover { border-color: #c9a84c; color: #c9a84c; }
+    #height-picker .hp-btn.active { border-color: #c9a84c; background: #2a1e0a; color: #c9a84c; }
+    #height-picker .hp-cancel { color: #6a5a8a; border-color: #2a2840; margin-top: 8px; }
+
+    /* ── HEIGHT DISPLAY (panel) ── */
+    .height-selector { display: flex; gap: 4px; margin-bottom: 6px; }
+    .height-selector .hs-btn {
+      flex: 1; padding: 5px 2px; background: #13121e; border: 1px solid #2a2840;
+      color: #a09088; cursor: pointer; border-radius: 3px;
+      font-family: 'Courier New', monospace; font-size: 10px; text-align: center;
+      transition: all 0.15s;
+    }
+    .height-selector .hs-btn:hover { border-color: #c9a84c; color: #c9a84c; }
+    .height-selector .hs-btn.active { border-color: #c9a84c; background: #2a1e0a; color: #c9a84c; }
   </style>
 </head>
 <body>
@@ -173,9 +206,11 @@
     <input type="range" id="cam-fov" min="40" max="110" value="84">
     <span class="val-display" id="fov-disp">84°</span>
   </div>
-  <div class="row"><label>Hauteur</label>
-    <input type="range" id="cam-height" min="0" max="5" value="1.2" step="0.1">
-    <span class="val-display" id="height-disp">1.2m</span>
+  <label>Hauteur caméra (spawn + WP)</label>
+  <div class="height-selector">
+    <button class="hs-btn active" data-h="1.2">1.20m</button>
+    <button class="hs-btn"        data-h="1.5">1.50m</button>
+    <button class="hs-btn"        data-h="1.8">1.80m</button>
   </div>
 
   <h3>Éclairage</h3>
@@ -235,6 +270,14 @@
   <button class="pop-btn pop-cancel" id="pop-cancel">✕ Annuler</button>
 </div>
 
+<div id="height-picker">
+  <div class="hp-title">Hauteur caméra</div>
+  <button class="hp-btn" data-h="1.2">1.20 m — Standard</button>
+  <button class="hp-btn" data-h="1.5">1.50 m — Confort</button>
+  <button class="hp-btn" data-h="1.8">1.80 m — Grand format</button>
+  <button class="hp-btn hp-cancel" id="hp-cancel">✕ Annuler</button>
+</div>
+
 <script type="importmap">
 {
   "imports": {
@@ -279,8 +322,18 @@ const state = {
   hdriList: [],
   selectedTag: null,
   mode: 'navigate',  // 'navigate' | 'spawn' | 'waypoint'
-  modelBox: null
+  modelBox: null,
+  cameraHeight: 1.2   // hauteur fixe partagée spawn + WP
 };
+
+// ── HEIGHT SELECTOR (panel buttons) ──────────────────────
+document.querySelectorAll('.height-selector .hs-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.height-selector .hs-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    state.cameraHeight = parseFloat(btn.dataset.h);
+  });
+});
 
 // Helpers visuels
 const wpHelpers = [];
@@ -604,9 +657,6 @@ document.getElementById('cam-fov').addEventListener('input', e => {
   document.getElementById('fov-disp').textContent = e.target.value + '°';
 });
 
-document.getElementById('cam-height').addEventListener('input', e => {
-  document.getElementById('height-disp').textContent = e.target.value + 'm';
-});
 
 // ── MODE (1=Navigation / 2=Placement) ────────────────────
 let navMode = 1;
@@ -649,11 +699,47 @@ function hidePopup() {
 }
 document.getElementById('pop-cancel').addEventListener('click', hidePopup);
 
-document.getElementById('pop-spawn').addEventListener('click', () => {
-  if (!pendingHit) return;
-  const h      = parseFloat(document.getElementById('cam-height').value) || 1.2;
-  const floorY = getFloorY(pendingHit.x, pendingHit.z);
-  let pos3d    = new THREE.Vector3(pendingHit.x, floorY + h, pendingHit.z);
+// ── HEIGHT PICKER logic ───────────────────────────────────
+let heightPickerCallback = null;
+
+function showHeightPicker(anchorX, anchorY, cb) {
+  const picker = document.getElementById('height-picker');
+  // Marquer le bouton actif selon state.cameraHeight
+  picker.querySelectorAll('.hp-btn[data-h]').forEach(b => {
+    b.classList.toggle('active', parseFloat(b.dataset.h) === state.cameraHeight);
+  });
+  picker.style.left    = Math.min(anchorX + 8, window.innerWidth  - 180) + 'px';
+  picker.style.top     = Math.min(anchorY + 8, window.innerHeight - 160) + 'px';
+  picker.style.display = 'block';
+  heightPickerCallback = cb;
+}
+
+function hideHeightPicker() {
+  document.getElementById('height-picker').style.display = 'none';
+  heightPickerCallback = null;
+}
+
+document.getElementById('height-picker').querySelectorAll('.hp-btn[data-h]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const h = parseFloat(btn.dataset.h);
+    state.cameraHeight = h;
+    // Sync boutons panel
+    document.querySelectorAll('.height-selector .hs-btn').forEach(b => {
+      b.classList.toggle('active', parseFloat(b.dataset.h) === h);
+    });
+    hideHeightPicker();
+    if (heightPickerCallback) heightPickerCallback(h);
+  });
+});
+document.getElementById('hp-cancel').addEventListener('click', () => {
+  hideHeightPicker();
+  hidePopup();
+});
+
+// ── PLACE SPAWN (après sélection hauteur) ────────────────
+function placeSpawnAt(hit, h) {
+  const floorY = getFloorY(hit.x, hit.z);
+  let pos3d    = new THREE.Vector3(hit.x, floorY + h, hit.z);
   pos3d        = pushFromWalls(pos3d);
   const pos    = { x: +pos3d.x.toFixed(3), y: +pos3d.y.toFixed(3), z: +pos3d.z.toFixed(3) };
   state.spawnPos = pos;
@@ -665,13 +751,24 @@ document.getElementById('pop-spawn').addEventListener('click', () => {
   spawnHelper = makeSpawnMarker(pos);
   scene.add(spawnHelper);
   updatePathLine();
-  setStatus('Spawn défini + téléporté → ' + pos.x + ', ' + pos.y + ', ' + pos.z);
-  hidePopup();
+  setStatus('Spawn ' + h + 'm → ' + pos.x + ', ' + pos.y + ', ' + pos.z);
+}
+
+document.getElementById('pop-spawn').addEventListener('click', (e) => {
+  if (!pendingHit) return;
+  const hit = pendingHit.clone();
+  // Masquer le placement popup, afficher le height picker au même endroit
+  document.getElementById('placement-popup').style.display = 'none';
+  showHeightPicker(
+    parseInt(document.getElementById('placement-popup').style.left) || e.clientX,
+    parseInt(document.getElementById('placement-popup').style.top)  || e.clientY,
+    (h) => { placeSpawnAt(hit, h); pendingHit = null; }
+  );
 });
 
 document.getElementById('pop-waypoint').addEventListener('click', () => {
   if (!pendingHit) return;
-  const h      = parseFloat(document.getElementById('cam-height').value) || 1.2;
+  const h      = state.cameraHeight;
   const floorY = getFloorY(pendingHit.x, pendingHit.z);
   let pos3d    = new THREE.Vector3(pendingHit.x, floorY + h, pendingHit.z);
   pos3d        = pushFromWalls(pos3d);
@@ -681,7 +778,7 @@ document.getElementById('pop-waypoint').addEventListener('click', () => {
   wpHelpers.push(marker); scene.add(marker);
   renderWpList();
   updatePathLine();
-  setStatus('WP #' + state.waypoints.length + ' ajouté');
+  setStatus('WP #' + state.waypoints.length + ' ajouté (' + h + 'm)');
   hidePopup();
 });
 
@@ -762,7 +859,7 @@ window.addEventListener('keyup', e => { keys[e.key] = false; });
 async function saveConfigs() {
   const preset = document.getElementById('cam-preset').value;
   const fov    = parseFloat(document.getElementById('cam-fov').value);
-  const height = parseFloat(document.getElementById('cam-height').value);
+  const height = state.cameraHeight;
   const ambientMode = document.getElementById('ambient-mode').value;
   const doorsAllOpen = document.getElementById('doors-all-open').checked;
   const hdri = document.getElementById('hdri-select').value;
@@ -892,4 +989,5 @@ animate();
 </script>
 </body>
 </html>
+
 
